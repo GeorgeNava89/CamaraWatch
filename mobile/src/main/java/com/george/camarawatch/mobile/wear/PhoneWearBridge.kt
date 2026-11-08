@@ -3,9 +3,12 @@ package com.george.camarawatch.mobile.wear
 import android.content.Context
 import android.util.Log
 import com.george.camarawatch.mobile.preview.PreviewHub
+import com.george.camarawatch.shared.CameraControls
 import com.george.camarawatch.shared.PhoneStatus
 import com.george.camarawatch.shared.PreviewCodec
 import com.george.camarawatch.shared.Protocol
+import com.george.camarawatch.shared.ShutterTimer
+import com.george.camarawatch.shared.encodeSnapshot
 import com.google.android.gms.wearable.ChannelClient
 import com.google.android.gms.wearable.PutDataMapRequest
 import com.google.android.gms.wearable.Wearable
@@ -31,19 +34,47 @@ class PhoneWearBridge(
     private val channelClient = Wearable.getChannelClient(context)
     private val channelJobs = ConcurrentHashMap<String, Job>()
 
-    suspend fun publishPreviewInfo(ip: String?, port: Int, status: PhoneStatus, recording: Boolean) {
+    suspend fun publishPreviewInfo(
+        ip: String?,
+        port: Int,
+        detail: String,
+        recording: Boolean,
+        controls: CameraControls,
+        timer: ShutterTimer,
+    ) {
         val request = PutDataMapRequest.create(Protocol.PREVIEW_INFO_PATH).apply {
             dataMap.putString(Protocol.KEY_IP, ip.orEmpty())
             dataMap.putInt(Protocol.KEY_PORT, port)
-            dataMap.putString(Protocol.KEY_STATUS, status.message)
+            dataMap.putString(Protocol.KEY_STATUS, detail)
             dataMap.putBoolean(Protocol.KEY_RECORDING, recording)
             dataMap.putLong(Protocol.KEY_TS, System.currentTimeMillis())
+            dataMap.putString(Protocol.KEY_FACING, controls.facing.name)
+            dataMap.putFloat(Protocol.KEY_ZOOM, controls.zoomRatio)
+            dataMap.putFloat(Protocol.KEY_ZOOM_MIN, controls.minZoom)
+            dataMap.putFloat(Protocol.KEY_ZOOM_MAX, controls.maxZoom)
+            dataMap.putString(Protocol.KEY_FLASH, controls.flashMode.name)
+            dataMap.putBoolean(Protocol.KEY_FLASH_SUPPORTED, controls.flashSupported)
+            dataMap.putBoolean(Protocol.KEY_TORCH_SUPPORTED, controls.torchSupported)
+            dataMap.putInt(Protocol.KEY_EXPOSURE, controls.exposureIndex)
+            dataMap.putInt(Protocol.KEY_EXPOSURE_MIN, controls.exposureMin)
+            dataMap.putInt(Protocol.KEY_EXPOSURE_MAX, controls.exposureMax)
+            dataMap.putFloat(Protocol.KEY_EXPOSURE_STEP, controls.exposureStep)
+            dataMap.putBoolean(Protocol.KEY_CAN_SWITCH, controls.canSwitchCamera)
+            dataMap.putInt(Protocol.KEY_TIMER, timer.seconds)
+            dataMap.putInt(Protocol.KEY_COUNTDOWN, timer.remaining)
+            dataMap.putBoolean(Protocol.KEY_COUNTDOWN_VIDEO, timer.forVideo)
         }
         dataClient.putDataItem(request.asPutDataRequest().setUrgent()).await()
     }
 
-    suspend fun broadcastStatus(status: PhoneStatus, recording: Boolean) {
-        val payload = "${status.name}|${status.message}|$recording".toByteArray(Charsets.UTF_8)
+    suspend fun broadcastStatus(
+        status: PhoneStatus,
+        detail: String,
+        recording: Boolean,
+        controls: CameraControls,
+        timer: ShutterTimer,
+    ) {
+        val payload = encodeSnapshot(status, detail, recording, controls, timer).toByteArray(Charsets.UTF_8)
         val nodes = nodeClient.connectedNodes.await()
         nodes.forEach { node ->
             runCatching {
