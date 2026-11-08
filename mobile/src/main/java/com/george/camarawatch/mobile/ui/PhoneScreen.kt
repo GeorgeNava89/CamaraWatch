@@ -36,6 +36,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 @Composable
 fun PhoneScreen(
     status: String,
+    cameraLine: String?,
     recording: Boolean,
     wifiEndpoint: String?,
     previewClients: Int,
@@ -53,7 +54,7 @@ fun PhoneScreen(
         ) {
             Text("Cámara Watch", style = MaterialTheme.typography.headlineMedium)
             Text(
-                "RedMagic 11 Pro · cámara trasera",
+                "RedMagic 11 Pro",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -102,6 +103,9 @@ fun PhoneScreen(
                 color = MaterialTheme.colorScheme.surfaceVariant,
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (cameraLine != null) {
+                        Text(cameraLine, style = MaterialTheme.typography.titleMedium)
+                    }
                     Text(status, style = MaterialTheme.typography.titleMedium)
                     Text(
                         "Wi‑Fi: ${wifiEndpoint ?: "sin red local"}",
@@ -113,6 +117,11 @@ fun PhoneScreen(
                     )
                     Text(
                         "Fotos → Pictures/CamaraWatch · Videos → Movies/CamaraWatch",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        "El reloj tiene que estar en Modo inteligente (Wear OS). En Modo ahorro de energía la app no abre.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

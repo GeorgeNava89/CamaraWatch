@@ -2,7 +2,6 @@ package com.george.camarawatch.mobile.wear
 
 import android.content.Intent
 import android.os.Build
-import com.george.camarawatch.mobile.CommandBus
 import com.george.camarawatch.mobile.camera.CameraForegroundService
 import com.george.camarawatch.shared.CameraCommand
 import com.george.camarawatch.shared.Protocol
@@ -13,9 +12,9 @@ import com.google.android.gms.wearable.WearableListenerService
 class PhoneWearListenerService : WearableListenerService() {
     override fun onMessageReceived(messageEvent: MessageEvent) {
         if (messageEvent.path != Protocol.COMMAND_PATH) return
-        val command = CameraCommand.fromWire(String(messageEvent.data, Charsets.UTF_8)) ?: return
-        CommandBus.emit(command)
-        startCameraService(command)
+        val wire = String(messageEvent.data, Charsets.UTF_8)
+        if (CameraCommand.fromWire(wire) == null) return
+        startCameraService(wire)
     }
 
     override fun onChannelOpened(channel: ChannelClient.Channel) {
@@ -29,9 +28,9 @@ class PhoneWearListenerService : WearableListenerService() {
         CameraForegroundService.onExternalChannelClosed(channel)
     }
 
-    private fun startCameraService(command: CameraCommand?) {
+    private fun startCameraService(wire: String?) {
         val intent = Intent(this, CameraForegroundService::class.java).apply {
-            if (command != null) putExtra(CameraForegroundService.EXTRA_COMMAND, command.name)
+            if (!wire.isNullOrBlank()) putExtra(CameraForegroundService.EXTRA_COMMAND, wire)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent)

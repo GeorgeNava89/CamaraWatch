@@ -11,6 +11,13 @@ object Protocol {
     const val TAKE_PHOTO = "TAKE_PHOTO"
     const val START_RECORD = "START_RECORD"
     const val STOP_RECORD = "STOP_RECORD"
+    const val SWITCH_CAMERA = "SWITCH_CAMERA"
+    const val ZOOM_IN = "ZOOM_IN"
+    const val ZOOM_OUT = "ZOOM_OUT"
+    const val SET_ZOOM = "SET_ZOOM"
+    const val SET_FLASH = "SET_FLASH"
+    const val EXPOSURE_UP = "EXPOSURE_UP"
+    const val EXPOSURE_DOWN = "EXPOSURE_DOWN"
 
     const val PREVIEW_PORT = 18765
     const val JPEG_QUALITY = 55
@@ -30,31 +37,35 @@ object Protocol {
     const val KEY_STATUS = "status"
     const val KEY_RECORDING = "recording"
     const val KEY_TS = "ts"
-}
-
-enum class CameraCommand {
-    TAKE_PHOTO,
-    START_RECORD,
-    STOP_RECORD;
-
-    companion object {
-        fun fromWire(value: String?): CameraCommand? = entries.firstOrNull { it.name == value }
-    }
+    const val KEY_FACING = "facing"
+    const val KEY_ZOOM = "zoom"
+    const val KEY_ZOOM_MIN = "zoom_min"
+    const val KEY_ZOOM_MAX = "zoom_max"
+    const val KEY_FLASH = "flash"
+    const val KEY_FLASH_SUPPORTED = "flash_ok"
+    const val KEY_TORCH_SUPPORTED = "torch_ok"
+    const val KEY_EXPOSURE = "exposure"
+    const val KEY_EXPOSURE_MIN = "exp_min"
+    const val KEY_EXPOSURE_MAX = "exp_max"
+    const val KEY_EXPOSURE_STEP = "exp_step"
+    const val KEY_CAN_SWITCH = "can_switch"
 }
 
 enum class PhoneStatus(val message: String) {
-    STARTING("Iniciando cámara trasera…"),
-    READY("Listo. Cámara trasera activa."),
+    STARTING("Iniciando cámara…"),
+    READY("Cámara lista."),
     WAITING_WATCH("Cámara lista. Esperando el reloj…"),
     WATCH_CONNECTED("Reloj conectado."),
     PREVIEW_WIFI("Vista previa por Wi‑Fi."),
     PREVIEW_WEAR("Vista previa por Wear OS."),
+    PREVIEW_PAUSED("Vista previa pausada. La cámara sigue lista."),
     TAKING_PHOTO("Tomando foto…"),
     PHOTO_SAVED("Foto guardada en Pictures/CamaraWatch."),
     RECORDING("Grabando video…"),
     VIDEO_SAVED("Video guardado en Movies/CamaraWatch."),
     NO_CAMERA_PERMISSION("Falta permiso de cámara."),
     CAMERA_UNAVAILABLE("Cámara no disponible."),
+    SWITCH_WHILE_RECORDING("No se puede cambiar de cámara mientras graba."),
     RECORD_ERROR("Error al grabar."),
     PHOTO_ERROR("Error al tomar la foto."),
     STOPPED("Cámara detenida."),

@@ -32,12 +32,14 @@ class MainActivity : ComponentActivity() {
         setContent {
             CamaraWatchTheme {
                 val status by CommandBus.statusDetail.collectAsState()
+                val controls by CommandBus.controls.collectAsState()
                 val recording by CommandBus.recording.collectAsState()
                 val endpoint by CommandBus.wifiEndpoint.collectAsState()
                 val clients by CommandBus.previewClients.collectAsState()
                 val running by CommandBus.serviceRunning.collectAsState()
                 PhoneScreen(
                     status = status,
+                    cameraLine = if (running) controls.summary() else null,
                     recording = recording,
                     wifiEndpoint = endpoint,
                     previewClients = clients,

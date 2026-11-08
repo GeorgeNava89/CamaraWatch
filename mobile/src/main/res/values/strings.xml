@@ -2,5 +2,5 @@
 <resources>
     <string name="app_name">Cámara Watch</string>
     <string name="notification_channel_name">Cámara Watch</string>
-    <string name="notification_channel_desc">Estado de la cámara trasera y la grabación</string>
+    <string name="notification_channel_desc">Estado de la cámara y la grabación</string>
 </resources>

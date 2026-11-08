@@ -1,6 +1,7 @@
 package com.george.camarawatch.mobile
 
 import com.george.camarawatch.shared.CameraCommand
+import com.george.camarawatch.shared.CameraControls
 import com.george.camarawatch.shared.PhoneStatus
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,6 +32,9 @@ object CommandBus {
     private val _serviceRunning = MutableStateFlow(false)
     val serviceRunning: StateFlow<Boolean> = _serviceRunning.asStateFlow()
 
+    private val _controls = MutableStateFlow(CameraControls())
+    val controls: StateFlow<CameraControls> = _controls.asStateFlow()
+
     fun emit(command: CameraCommand) {
         _commands.tryEmit(command)
     }
@@ -54,5 +58,9 @@ object CommandBus {
 
     fun setServiceRunning(value: Boolean) {
         _serviceRunning.value = value
+    }
+
+    fun setControls(value: CameraControls) {
+        _controls.value = value
     }
 }

@@ -22,41 +22,43 @@ import com.george.camarawatch.mobile.preview.PreviewHub
 import com.george.camarawatch.mobile.preview.TcpPreviewServer
 import com.george.camarawatch.mobile.wear.PhoneWearBridge
 import com.george.camarawatch.shared.CameraCommand
+import com.george.camarawatch.shared.CameraControls
 import com.george.camarawatch.shared.PhoneStatus
 import com.george.camarawatch.shared.Protocol
 import com.google.android.gms.wearable.ChannelClient
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class CameraForegroundService : LifecycleService() {
     private val hub = PreviewHub()
-    private lateinit var camera: RearCameraController
+    private lateinit var camera: PhoneCameraController
     private lateinit var tcpServer: TcpPreviewServer
     private lateinit var wearBridge: PhoneWearBridge
     private var wifiLock: WifiManager.WifiLock? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var tcpClients = 0
     private var channelClients = 0
+    private var wearSyncJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
         startInForeground(PhoneStatus.STARTING.message)
-        camera = RearCameraController(
+        camera = PhoneCameraController(
             context = this,
             lifecycleOwner = this,
             hub = hub,
             onStatus = { status, detail -> publishStatus(status, detail) },
             onRecording = { recording ->
                 CommandBus.setRecording(recording)
-                updateNotification(if (recording) PhoneStatus.RECORDING.message else CommandBus.statusDetail.value)
+                updateNotification(notificationText())
                 lifecycleScope.launch { syncWear() }
             },
+            onControls = ::onCameraControls,
         )
         tcpServer = TcpPreviewServer(hub) { count ->
             tcpClients = count
-            CommandBus.setPreviewClients(tcpClients + channelClients)
-            if (count > 0) {
-                publishStatus(PhoneStatus.PREVIEW_WIFI, PhoneStatus.PREVIEW_WIFI.message)
-            }
+            publishClients()
         }
         wearBridge = PhoneWearBridge(
             context = this,
@@ -64,10 +66,7 @@ class CameraForegroundService : LifecycleService() {
             scope = lifecycleScope,
             onChannelClients = { count ->
                 channelClients = count
-                CommandBus.setPreviewClients(tcpClients + channelClients)
-                if (count > 0 && tcpClients == 0) {
-                    publishStatus(PhoneStatus.PREVIEW_WEAR, PhoneStatus.PREVIEW_WEAR.message)
-                }
+                publishClients()
             },
         )
         acquireLocks()
@@ -123,6 +122,7 @@ class CameraForegroundService : LifecycleService() {
         CommandBus.setServiceRunning(false)
         CommandBus.setRecording(false)
         CommandBus.setPreviewClients(0)
+        CommandBus.setControls(CameraControls())
         CommandBus.setStatus(PhoneStatus.STOPPED)
         super.onDestroy()
     }
@@ -141,16 +141,71 @@ class CameraForegroundService : LifecycleService() {
 
     private fun handleCommand(command: CameraCommand) {
         when (command) {
-            CameraCommand.TAKE_PHOTO -> camera.takePhoto()
-            CameraCommand.START_RECORD -> camera.startRecording()
-            CameraCommand.STOP_RECORD -> camera.stopRecording()
+            CameraCommand.TakePhoto -> camera.takePhoto()
+            CameraCommand.StartRecord -> camera.startRecording()
+            CameraCommand.StopRecord -> camera.stopRecording()
+            CameraCommand.SwitchCamera -> camera.switchCamera()
+            CameraCommand.ZoomIn -> camera.zoomIn()
+            CameraCommand.ZoomOut -> camera.zoomOut()
+            is CameraCommand.SetZoom -> camera.setZoom(command.ratio)
+            is CameraCommand.SetFlash -> camera.setFlash(command.mode)
+            CameraCommand.ExposureUp -> camera.exposureUp()
+            CameraCommand.ExposureDown -> camera.exposureDown()
         }
+    }
+
+    private fun publishClients() {
+        val total = tcpClients + channelClients
+        CommandBus.setPreviewClients(total)
+        hub.setConsumerCount(total)
+        if (CommandBus.recording.value) return
+        val desired = when {
+            tcpClients > 0 -> PhoneStatus.PREVIEW_WIFI
+            channelClients > 0 -> PhoneStatus.PREVIEW_WEAR
+            CommandBus.status.value == PhoneStatus.PREVIEW_WIFI ||
+                CommandBus.status.value == PhoneStatus.PREVIEW_WEAR ||
+                CommandBus.status.value == PhoneStatus.PREVIEW_PAUSED -> PhoneStatus.PREVIEW_PAUSED
+            else -> null
+        }
+        if (desired != null && desired != CommandBus.status.value) {
+            publishStatus(desired, desired.message)
+        }
+    }
+
+    private fun onCameraControls(controls: CameraControls) {
+        CommandBus.setControls(controls)
+        if (CommandBus.recording.value) {
+            val detail = "Grabando · ${controls.shortLabel()}"
+            CommandBus.setStatus(PhoneStatus.RECORDING, detail)
+        }
+        updateNotification(notificationText())
+        scheduleWearSync()
     }
 
     private fun publishStatus(status: PhoneStatus, detail: String) {
         CommandBus.setStatus(status, detail)
-        updateNotification(detail)
+        updateNotification(notificationText())
         lifecycleScope.launch { syncWear() }
+    }
+
+    private fun scheduleWearSync() {
+        wearSyncJob?.cancel()
+        wearSyncJob = lifecycleScope.launch {
+            delay(180)
+            syncWear()
+        }
+    }
+
+    private fun notificationText(): String {
+        val controls = CommandBus.controls.value
+        val status = CommandBus.status.value
+        return when {
+            CommandBus.recording.value -> "Grabando · ${controls.shortLabel()}"
+            status == PhoneStatus.PREVIEW_PAUSED -> status.message
+            controls.shortLabel().isNotBlank() && status != PhoneStatus.STOPPED &&
+                status != PhoneStatus.STARTING -> controls.shortLabel()
+            else -> CommandBus.statusDetail.value
+        }
     }
 
     private suspend fun syncWear() {
@@ -158,10 +213,16 @@ class CameraForegroundService : LifecycleService() {
             wearBridge.publishPreviewInfo(
                 ip = NetworkAddress.localIpv4(),
                 port = Protocol.PREVIEW_PORT,
-                status = CommandBus.status.value,
+                detail = CommandBus.statusDetail.value,
                 recording = CommandBus.recording.value,
+                controls = CommandBus.controls.value,
             )
-            wearBridge.broadcastStatus(CommandBus.status.value, CommandBus.recording.value)
+            wearBridge.broadcastStatus(
+                status = CommandBus.status.value,
+                detail = CommandBus.statusDetail.value,
+                recording = CommandBus.recording.value,
+                controls = CommandBus.controls.value,
+            )
         }
     }
 
