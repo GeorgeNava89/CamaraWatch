@@ -34,6 +34,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
@@ -43,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -126,7 +128,6 @@ fun WatchScreen(
     ) {
         val side = if (maxWidth < maxHeight) maxWidth else maxHeight
         val safe = side * 0.16f
-        val edge = side * 0.09f
         val problem = if (counting) null else seriousNotice(statusText)
         if (frame != null) {
             Image(
@@ -160,39 +161,31 @@ fun WatchScreen(
         )
         if (!optionsOpen && !counting) {
             Column(
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .offset(x = edge, y = 46.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.align(Alignment.CenterStart),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                horizontalAlignment = Alignment.Start,
             ) {
                 if (camera.flashControlVisible) {
                     val nextFlash = camera.flashMode.next(camera.flashSupported, camera.torchSupported)
-                    RoundTool(
+                    IconButton(
                         description = "Flash ${camera.flashMode.chipLabel()}",
-                        active = camera.flashMode != FlashMode.OFF,
                         onClick = { if (nextFlash != null) onCommand(CameraCommand.SetFlash(nextFlash)) },
                     ) {
                         FlashGlyph(
                             filled = camera.flashMode != FlashMode.OFF,
-                            color = when (camera.flashMode) {
-                                FlashMode.OFF -> Color.White
-                                FlashMode.TORCH -> Color(0xFFE08A00)
-                                else -> Color.Black
-                            },
+                            color = if (camera.flashMode == FlashMode.TORCH) Color(0xFFFFC14D) else Color.White,
                         )
                         if (camera.flashMode == FlashMode.AUTO) {
                             Text("A", color = Color.White, style = MaterialTheme.typography.caption2)
                         }
                     }
                 }
-                RoundTool(
+                IconButton(
                     description = when (timer) {
                         3 -> "Temporizador 3 segundos"
                         10 -> "Temporizador 10 segundos"
                         else -> "Temporizador apagado"
                     },
-                    active = timer == 3 || timer == 10,
                     onClick = {
                         onTimer(
                             when (timer) {
@@ -207,23 +200,23 @@ fun WatchScreen(
                         Text(
                             timer.toString(),
                             color = Color.White,
-                            style = MaterialTheme.typography.caption1,
+                            style = MaterialTheme.typography.title3,
                         )
                     } else {
                         TimerGlyph()
                     }
                 }
             }
-            RoundTool(
+            IconButton(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .offset(x = -edge, y = 46.dp),
+                    .offset(y = (-4).dp),
+                alignEnd = true,
                 description = when {
                     isRecording -> "Para primero para cambiar de modo"
                     mode == CaptureMode.PHOTO -> "Cambiar a video"
                     else -> "Cambiar a foto"
                 },
-                active = mode == CaptureMode.VIDEO,
                 enabled = !isRecording,
                 onClick = {
                     if (!isRecording) {
@@ -232,6 +225,31 @@ fun WatchScreen(
                 },
             ) {
                 if (mode == CaptureMode.PHOTO) VideoGlyph() else CameraGlyph()
+            }
+            if (camera.canSwitchCamera && !isRecording) {
+                IconButton(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .offset(y = 40.dp),
+                    alignEnd = true,
+                    description = if (camera.facing == CameraFacing.BACK) {
+                        "Cambiar a frontal"
+                    } else {
+                        "Cambiar a trasera"
+                    },
+                    onClick = { onCommand(CameraCommand.SwitchCamera) },
+                ) {
+                    SwitchCameraGlyph()
+                }
+            }
+        }
+        if (!optionsOpen && !counting) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 5.dp),
+            ) {
+                Chevron(ChevronDirection.UP)
             }
         }
         if (optionsOpen) {
@@ -257,45 +275,54 @@ private fun ZoomArcLayer(
     onZoom: (Float) -> Unit,
     onOpenOptions: () -> Unit,
 ) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+    val widthPx = constraints.maxWidth.toFloat()
+    val heightPx = constraints.maxHeight.toFloat()
+    val labelGeom = arcGeom(widthPx, heightPx, 0f)
     Canvas(modifier = Modifier.fillMaxSize()) {
         if (!zoomEnabled && dragging == null) return@Canvas
         if (!controls.zoomSupported) return@Canvas
         val geom = arcGeom(size.width, size.height, 0f)
-        val stroke = Stroke(width = 2.4.dp.toPx(), cap = StrokeCap.Round)
+        val arcRect = arcRect(geom)
+        val stroke = Stroke(width = 2.2.dp.toPx(), cap = StrokeCap.Round)
         drawArc(
             color = Color.Black.copy(alpha = 0.45f),
-            startAngle = 180f,
-            sweepAngle = -180f,
+            startAngle = ARC_START,
+            sweepAngle = ARC_SWEEP,
             useCenter = false,
-            topLeft = Offset(geom.center.x - geom.radius, geom.center.y - geom.radius),
-            size = Size(geom.radius * 2, geom.radius * 2),
-            style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round),
+            topLeft = arcRect.topLeft,
+            size = arcRect.size,
+            style = Stroke(width = 4.5.dp.toPx(), cap = StrokeCap.Round),
         )
         drawArc(
-            color = Color.White.copy(alpha = 0.38f),
-            startAngle = 180f,
-            sweepAngle = -180f,
+            color = Color.White.copy(alpha = 0.42f),
+            startAngle = ARC_START,
+            sweepAngle = ARC_SWEEP,
             useCenter = false,
-            topLeft = Offset(geom.center.x - geom.radius, geom.center.y - geom.radius),
-            size = Size(geom.radius * 2, geom.radius * 2),
+            topLeft = arcRect.topLeft,
+            size = arcRect.size,
             style = stroke,
         )
         val shown = dragging ?: controls.zoomRatio
         val t = zoomFraction(controls.minZoom, controls.maxZoom, shown)
         if (t > 0.02f) {
             drawArc(
-                color = Color.White.copy(alpha = 0.9f),
-                startAngle = 180f,
-                sweepAngle = -180f * t,
+                color = Color.White.copy(alpha = 0.92f),
+                startAngle = ARC_START,
+                sweepAngle = ARC_SWEEP * t,
                 useCenter = false,
-                topLeft = Offset(geom.center.x - geom.radius, geom.center.y - geom.radius),
-                size = Size(geom.radius * 2, geom.radius * 2),
+                topLeft = arcRect.topLeft,
+                size = arcRect.size,
                 style = stroke,
             )
         }
         val thumb = pointOnArc(geom, t)
-        drawCircle(Color.Black.copy(alpha = 0.55f), radius = 6.5.dp.toPx(), center = thumb)
-        drawCircle(Color.White, radius = 4.2.dp.toPx(), center = thumb)
+        drawCircle(Color.Black.copy(alpha = 0.55f), radius = 5.5.dp.toPx(), center = thumb)
+        drawCircle(Color.White, radius = 3.4.dp.toPx(), center = thumb)
+    }
+    if (controls.zoomSupported) {
+        ArcEndMark(zoomMark(controls.minZoom), inwardLabel(labelGeom, 0f))
+        ArcEndMark(zoomMark(controls.maxZoom), inwardLabel(labelGeom, 1f))
     }
     Box(
         modifier = Modifier
@@ -361,6 +388,22 @@ private fun ZoomArcLayer(
                     },
                 )
             },
+    )
+    }
+}
+
+@Composable
+private fun ArcEndMark(text: String, at: Offset) {
+    Text(
+        text = text,
+        color = Color.White,
+        style = MaterialTheme.typography.caption2,
+        modifier = Modifier.offset {
+            IntOffset(
+                (at.x - 12.dp.toPx()).toInt(),
+                (at.y - 8.dp.toPx()).toInt(),
+            )
+        },
     )
 }
 
@@ -452,32 +495,29 @@ private fun CaptureOverlay(
                 )
             }
         }
-        Column(
+        Shutter(
             modifier = Modifier.align(Alignment.BottomCenter),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            if (countdown <= 0) {
-                Chevron(ChevronDirection.UP)
-                Spacer(Modifier.size(6.dp))
-            }
-            Shutter(
-                video = mode == CaptureMode.VIDEO,
-                recording = recording,
-                onClick = onShutter,
-            )
-        }
+            video = mode == CaptureMode.VIDEO,
+            recording = recording,
+            onClick = onShutter,
+        )
     }
 }
 
 @Composable
-private fun Shutter(video: Boolean, recording: Boolean, onClick: () -> Unit) {
+private fun Shutter(
+    video: Boolean,
+    recording: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val description = when {
         recording -> "Parar"
         video -> "Grabar"
         else -> "Foto"
     }
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(46.dp)
             .clip(CircleShape)
             .border(3.dp, Color.White, CircleShape)
@@ -509,24 +549,20 @@ private fun Shutter(video: Boolean, recording: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun RoundTool(
+private fun IconButton(
     description: String,
-    active: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    alignEnd: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    Column(
+    Box(
         modifier = modifier
-            .size(42.dp)
-            .clip(CircleShape)
-            .background(Color(0x80303030))
-            .border(if (active) 2.dp else 0.dp, Color.White, CircleShape)
+            .size(44.dp)
             .clickable(enabled = enabled, onClick = onClick)
             .semantics { contentDescription = description },
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+        contentAlignment = if (alignEnd) Alignment.CenterEnd else Alignment.CenterStart,
     ) {
         content()
     }
@@ -599,28 +635,56 @@ private fun seriousNotice(text: String): String? {
 
 private data class ArcGeom(val center: Offset, val radius: Float, val tolerance: Float)
 
+private const val ARC_START = 222f
+private const val ARC_SWEEP = 96f
+
 private fun arcGeom(width: Float, height: Float, tolerance: Float): ArcGeom {
     val side = if (width < height) width else height
-    return ArcGeom(Offset(width / 2f, height / 2f), side * 0.42f, tolerance)
+    return ArcGeom(Offset(width / 2f, height / 2f), side * 0.44f, tolerance)
 }
+
+private data class ArcRect(val topLeft: Offset, val size: Size)
+
+private fun arcRect(geom: ArcGeom) = ArcRect(
+    topLeft = Offset(geom.center.x - geom.radius, geom.center.y - geom.radius),
+    size = Size(geom.radius * 2f, geom.radius * 2f),
+)
+
+private fun arcDegrees(fraction: Float): Float = ARC_START + ARC_SWEEP * fraction.coerceIn(0f, 1f)
 
 private fun fractionOnArc(geom: ArcGeom, point: Offset, loose: Boolean = false): Float? {
     val dx = point.x - geom.center.x
-    val dyUp = geom.center.y - point.y
-    val distance = hypot(dx, dyUp)
-    val limit = if (loose) geom.tolerance * 1.8f else geom.tolerance
+    val dy = point.y - geom.center.y
+    val distance = hypot(dx, dy)
+    val limit = if (loose) geom.tolerance * 1.6f else geom.tolerance
     if (limit > 0f && abs(distance - geom.radius) > limit) return null
-    val angle = atan2(dyUp, dx)
-    if (angle < 0.08f || angle > Math.PI.toFloat() - 0.08f) return null
-    return (1f - angle / Math.PI.toFloat()).coerceIn(0f, 1f)
+    var degrees = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
+    if (degrees < 0f) degrees += 360f
+    val end = ARC_START + ARC_SWEEP
+    if (degrees < ARC_START - 6f || degrees > end + 6f) return null
+    return ((degrees - ARC_START) / ARC_SWEEP).coerceIn(0f, 1f)
 }
 
 private fun pointOnArc(geom: ArcGeom, fraction: Float): Offset {
-    val angle = Math.PI * (1.0 - fraction.coerceIn(0f, 1f).toDouble())
+    val radians = Math.toRadians(arcDegrees(fraction).toDouble())
     return Offset(
-        x = geom.center.x + (geom.radius * cos(angle)).toFloat(),
-        y = geom.center.y - (geom.radius * sin(angle)).toFloat(),
+        x = geom.center.x + (geom.radius * cos(radians)).toFloat(),
+        y = geom.center.y + (geom.radius * sin(radians)).toFloat(),
     )
+}
+
+private fun inwardLabel(geom: ArcGeom, fraction: Float): Offset {
+    val end = pointOnArc(geom, fraction)
+    val dx = geom.center.x - end.x
+    val dy = geom.center.y - end.y
+    val length = hypot(dx, dy).coerceAtLeast(1f)
+    val inset = geom.radius * 0.16f
+    return Offset(end.x + dx / length * inset, end.y + dy / length * inset)
+}
+
+private fun zoomMark(ratio: Float): String {
+    val nearest = ratio.toInt().toFloat()
+    return if (abs(ratio - nearest) < 0.08f) "${nearest.toInt()}X" else String.format("%.1fX", ratio)
 }
 
 private fun zoomFraction(min: Float, max: Float, ratio: Float): Float {
@@ -883,7 +947,7 @@ private fun Chevron(direction: ChevronDirection) {
 
 @Composable
 private fun VideoGlyph() {
-    Canvas(modifier = Modifier.size(14.dp)) {
+    Canvas(modifier = Modifier.size(22.dp)) {
         drawRoundRect(
             color = Color.White,
             topLeft = Offset(0f, size.height * 0.22f),
@@ -902,13 +966,49 @@ private fun VideoGlyph() {
 }
 
 @Composable
+private fun SwitchCameraGlyph() {
+    Canvas(modifier = Modifier.size(22.dp)) {
+        val stroke = Stroke(width = 2.1.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val path = Path().apply {
+            moveTo(size.width * 0.22f, size.height * 0.40f)
+            quadraticBezierTo(size.width * 0.50f, size.height * 0.02f, size.width * 0.80f, size.height * 0.36f)
+            moveTo(size.width * 0.62f, size.height * 0.22f)
+            lineTo(size.width * 0.84f, size.height * 0.36f)
+            lineTo(size.width * 0.66f, size.height * 0.52f)
+            moveTo(size.width * 0.78f, size.height * 0.60f)
+            quadraticBezierTo(size.width * 0.50f, size.height * 0.98f, size.width * 0.20f, size.height * 0.64f)
+            moveTo(size.width * 0.38f, size.height * 0.78f)
+            lineTo(size.width * 0.16f, size.height * 0.64f)
+            lineTo(size.width * 0.34f, size.height * 0.48f)
+        }
+        drawPath(path, Color.White, style = stroke)
+    }
+}
+
+@Composable
 private fun CameraGlyph() {
-    Canvas(modifier = Modifier.size(14.dp)) {
+    Canvas(modifier = Modifier.size(22.dp)) {
+        drawRoundRect(
+            color = Color.White,
+            topLeft = Offset(size.width * 0.04f, size.height * 0.28f),
+            size = Size(size.width * 0.92f, size.height * 0.62f),
+            cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx()),
+        )
+        drawRoundRect(
+            color = Color.White,
+            topLeft = Offset(size.width * 0.18f, size.height * 0.08f),
+            size = Size(size.width * 0.28f, size.height * 0.24f),
+            cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
+        )
+        drawCircle(
+            color = Color.Black,
+            radius = size.minDimension * 0.16f,
+            center = Offset(size.width * 0.5f, size.height * 0.58f),
+        )
         drawCircle(
             color = Color.White,
-            radius = size.minDimension * 0.38f,
-            style = Stroke(width = 1.6.dp.toPx()),
+            radius = size.minDimension * 0.07f,
+            center = Offset(size.width * 0.5f, size.height * 0.58f),
         )
-        drawCircle(color = Color.White, radius = size.minDimension * 0.16f)
     }
 }

@@ -11,7 +11,7 @@ App personal en español latino para controlar la cámara del **RedMagic 11 Pro*
 
 ## Descargas
 
-La versión **1.3.0** se genera al compilar (misma firma en teléfono y reloj):
+La versión **1.4.0** se genera al compilar (misma firma en teléfono y reloj):
 
 - `mobile/build/outputs/apk/release/mobile-release.apk`
 - `wear/build/outputs/apk/release/wear-release.apk`
@@ -72,10 +72,10 @@ Con la pantalla apagada, en ambiente o con la app en segundo plano, Cámara Watc
 ## Uso
 
 1. Teléfono: **Cámara Watch** en primer plano o con la notificación activa. El reloj, en Modo inteligente.
-2. En modo foto, el disparador toma la imagen (`Pictures/CamaraWatch`). El botón de la derecha (videocámara) pasa a video. En video, ese botón muestra una cámara y vuelve a foto. Mientras graba no cambia de modo: primero hay que parar.
+2. En modo foto, el disparador toma la imagen (`Pictures/CamaraWatch`). El ícono de videocámara, al extremo derecho, pasa a video. En video ese botón es una cámara de verdad y vuelve a foto. Debajo está el ícono de flechas para cambiar entre frontal y trasera. Mientras graba no cambia de modo ni de cámara: primero hay que parar.
 3. El disparador graba y, tocado otra vez, para (`Movies/CamaraWatch`).
 4. A la izquierda, el flash cicla apagado, encendido, automático y linterna. Debajo, el temporizador cicla 3 s, 10 s y apagado. Si la cámara no tiene flash, ese botón no aparece.
-5. El zoom es un arco delgado en la mitad superior: arrastren el dedo sobre el riel para acercar o alejar. El valor (por ejemplo 1.0x) solo aparece mientras arrastran.
+5. El zoom es un arco corto arriba, cerca de las 12. A la izquierda dice 1X (o el mínimo real) y a la derecha el máximo de esa cámara. Arrastren el riel. El valor intermedio solo aparece mientras arrastran.
 6. Deslicen hacia arriba para cambiar de cámara y la exposición. El panel también repite flash, temporizador y zoom. Deslicen hacia abajo o toquen fuera para cerrar. No se puede cambiar de cámara mientras graba.
 7. El temporizador cuenta en el teléfono y se ve en el reloj. Se cancela con otro toque al disparador. El reloj no muestra si la vista previa va por Wi‑Fi o por Wear OS.
 8. El teléfono muestra el estado en español: cámara frontal o trasera, zoom, flash o linterna, temporizador, y si la vista previa va por Wi‑Fi, por Wear OS o está pausada.
