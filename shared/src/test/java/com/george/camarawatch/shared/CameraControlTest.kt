@@ -16,6 +16,7 @@ class CameraControlTest {
             CameraCommand.ZoomOut,
             CameraCommand.ExposureUp,
             CameraCommand.ExposureDown,
+            CameraCommand.CancelCountdown,
         ).forEach { command ->
             assertEquals(command, CameraCommand.fromWire(command.toWire()))
         }
@@ -32,6 +33,17 @@ class CameraControlTest {
             CameraCommand.SetFlash(FlashMode.TORCH),
             CameraCommand.fromWire("SET_FLASH|TORCH"),
         )
+    }
+
+    @Test
+    fun timerCommandsRoundTrip() {
+        assertEquals(CameraCommand.SetTimer(10), CameraCommand.fromWire("SET_TIMER|10"))
+        assertEquals(CameraCommand.ArmCountdown(video = false, seconds = 3), CameraCommand.fromWire("ARM|PHOTO|3"))
+        assertEquals(CameraCommand.ArmCountdown(video = true, seconds = 10), CameraCommand.fromWire("ARM|VIDEO|10"))
+        assertEquals(CameraCommand.CancelCountdown, CameraCommand.fromWire("CANCEL_TIMER"))
+        assertNull(CameraCommand.fromWire("SET_TIMER|5"))
+        assertNull(CameraCommand.fromWire("ARM|PHOTO|2"))
+        assertNull(CameraCommand.fromWire("ARM|BOOM|3"))
     }
 
     @Test
@@ -76,6 +88,19 @@ class CameraControlTest {
         assertEquals(false, decoded.controls?.flashSupported)
         assertEquals(true, decoded.controls?.canSwitchCamera)
         assertEquals("Cámara frontal · Zoom 1.5x · exposición +1.0", decoded.controls?.summary())
+        val timed = decodeSnapshot(
+            encodeSnapshot(
+                status = PhoneStatus.COUNTDOWN,
+                message = "Foto en 3…",
+                recording = false,
+                controls = controls,
+                timer = ShutterTimer(seconds = 3, remaining = 3, forVideo = false),
+            ),
+        )
+        assertEquals(3, timed.timer.remaining)
+        assertEquals(3, timed.timer.seconds)
+        assertEquals(false, timed.timer.forVideo)
+        assertEquals("Foto en 3…", timed.message)
     }
 
     @Test

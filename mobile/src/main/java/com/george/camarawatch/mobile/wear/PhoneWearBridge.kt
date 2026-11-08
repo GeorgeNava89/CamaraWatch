@@ -7,6 +7,7 @@ import com.george.camarawatch.shared.CameraControls
 import com.george.camarawatch.shared.PhoneStatus
 import com.george.camarawatch.shared.PreviewCodec
 import com.george.camarawatch.shared.Protocol
+import com.george.camarawatch.shared.ShutterTimer
 import com.george.camarawatch.shared.encodeSnapshot
 import com.google.android.gms.wearable.ChannelClient
 import com.google.android.gms.wearable.PutDataMapRequest
@@ -39,6 +40,7 @@ class PhoneWearBridge(
         detail: String,
         recording: Boolean,
         controls: CameraControls,
+        timer: ShutterTimer,
     ) {
         val request = PutDataMapRequest.create(Protocol.PREVIEW_INFO_PATH).apply {
             dataMap.putString(Protocol.KEY_IP, ip.orEmpty())
@@ -58,6 +60,9 @@ class PhoneWearBridge(
             dataMap.putInt(Protocol.KEY_EXPOSURE_MAX, controls.exposureMax)
             dataMap.putFloat(Protocol.KEY_EXPOSURE_STEP, controls.exposureStep)
             dataMap.putBoolean(Protocol.KEY_CAN_SWITCH, controls.canSwitchCamera)
+            dataMap.putInt(Protocol.KEY_TIMER, timer.seconds)
+            dataMap.putInt(Protocol.KEY_COUNTDOWN, timer.remaining)
+            dataMap.putBoolean(Protocol.KEY_COUNTDOWN_VIDEO, timer.forVideo)
         }
         dataClient.putDataItem(request.asPutDataRequest().setUrgent()).await()
     }
@@ -67,8 +72,9 @@ class PhoneWearBridge(
         detail: String,
         recording: Boolean,
         controls: CameraControls,
+        timer: ShutterTimer,
     ) {
-        val payload = encodeSnapshot(status, detail, recording, controls).toByteArray(Charsets.UTF_8)
+        val payload = encodeSnapshot(status, detail, recording, controls, timer).toByteArray(Charsets.UTF_8)
         val nodes = nodeClient.connectedNodes.await()
         nodes.forEach { node ->
             runCatching {

@@ -18,6 +18,9 @@ object Protocol {
     const val SET_FLASH = "SET_FLASH"
     const val EXPOSURE_UP = "EXPOSURE_UP"
     const val EXPOSURE_DOWN = "EXPOSURE_DOWN"
+    const val SET_TIMER = "SET_TIMER"
+    const val ARM = "ARM"
+    const val CANCEL_TIMER = "CANCEL_TIMER"
 
     const val PREVIEW_PORT = 18765
     const val JPEG_QUALITY = 55
@@ -49,6 +52,9 @@ object Protocol {
     const val KEY_EXPOSURE_MAX = "exp_max"
     const val KEY_EXPOSURE_STEP = "exp_step"
     const val KEY_CAN_SWITCH = "can_switch"
+    const val KEY_TIMER = "timer"
+    const val KEY_COUNTDOWN = "countdown"
+    const val KEY_COUNTDOWN_VIDEO = "countdown_video"
 }
 
 enum class PhoneStatus(val message: String) {
@@ -66,6 +72,8 @@ enum class PhoneStatus(val message: String) {
     NO_CAMERA_PERMISSION("Falta permiso de cámara."),
     CAMERA_UNAVAILABLE("Cámara no disponible."),
     SWITCH_WHILE_RECORDING("No se puede cambiar de cámara mientras graba."),
+    COUNTDOWN("Temporizador…"),
+    TIMER_CANCELLED("Temporizador cancelado."),
     RECORD_ERROR("Error al grabar."),
     PHOTO_ERROR("Error al tomar la foto."),
     STOPPED("Cámara detenida."),

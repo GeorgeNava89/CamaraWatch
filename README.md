@@ -2,8 +2,8 @@
 
 App personal en español latino para controlar la cámara del **RedMagic 11 Pro** desde el **OnePlus Watch 3** (Wear OS, pantalla redonda).
 
-- Teléfono: CameraX, foto y video con la cámara trasera o frontal, zoom, flash, linterna y exposición. Servicio en primer plano y estados en español.
-- Reloj: vista previa en vivo, **Foto**, **Grabar** / **Parar**, zoom, y una segunda página con flash, linterna, exposición y cambio de cámara.
+- Teléfono: CameraX, foto y video con la cámara trasera o frontal, zoom, flash, linterna, exposición y temporizador. Servicio en primer plano y estados en español.
+- Reloj: vista previa a pantalla completa y un disparador chico. Deslizar a la derecha pasa a video; en video, deslizar a la izquierda vuelve a foto. Deslizar hacia arriba abre flash, temporizador, zoom, exposición y cambio de cámara.
 - Módulos: `:mobile`, `:wear`, `:shared`
 - `applicationId`: `com.george.camarawatch`
 - Vista previa: JPEG por TCP en Wi‑Fi (preferido) y respaldo por Wearable `ChannelClient`. Los comandos van por el Data Layer de Wear OS (Bluetooth), así que foto, video, zoom, flash y cambio de cámara no dependen del Wi‑Fi.
@@ -11,7 +11,7 @@ App personal en español latino para controlar la cámara del **RedMagic 11 Pro*
 
 ## Descargas
 
-La versión **1.1.0** se genera al compilar (misma firma en teléfono y reloj):
+La versión **1.2.0** se genera al compilar (misma firma en teléfono y reloj):
 
 - `mobile/build/outputs/apk/release/mobile-release.apk`
 - `wear/build/outputs/apk/release/wear-release.apk`
@@ -48,7 +48,7 @@ El APK del reloj no se instala solo desde Play. Háganlo por depuración inalám
    - `adb pair <IP>:<puerto> <código>` (si pide emparejamiento)
    - `adb connect <IP>:<puerto>`
    - `adb install -r CamaraWatch-watch-release.apk`
-6. En el reloj abran **Cámara Watch**. Deberían ver la vista previa, **Foto**, **Grabar** y el zoom.
+6. En el reloj abran **Cámara Watch**. Deberían ver la vista previa y un disparador abajo.
 
 ## Modo del reloj
 
@@ -72,11 +72,11 @@ Con la pantalla apagada, en ambiente o con la app en segundo plano, Cámara Watc
 ## Uso
 
 1. Teléfono: **Cámara Watch** en primer plano o con la notificación activa. El reloj, en Modo inteligente.
-2. Reloj: **Foto** guarda en `Pictures/CamaraWatch`.
-3. Reloj: **Grabar** inicia video; **Parar** lo detiene (`Movies/CamaraWatch`).
-4. **−** y **+** cambian el zoom de la cámara activa (por ejemplo 1.0x) mientras hay vista previa y, si el teléfono lo permite, también mientras graban.
-5. **Más** abre flash (apagado, encendido, auto), linterna, exposición y **Cambiar a frontal** / **Cambiar a trasera**. Si la cámara no tiene flash, ese control no aparece. No se puede cambiar de cámara mientras graba.
-6. El teléfono muestra el estado en español: cámara frontal o trasera, zoom, flash o linterna, y si la vista previa va por Wi‑Fi, por Wear OS o está pausada.
+2. En modo foto, el disparador toma la imagen (`Pictures/CamaraWatch`).
+3. Deslicen a la derecha para video. El mismo disparador graba; tóquenlo otra vez para parar (`Movies/CamaraWatch`). Deslicen a la izquierda para volver a foto. Mientras graba, ese desliz no cambia de modo.
+4. Deslicen hacia arriba para las opciones: flash (apagado, encendido, automático, linterna), temporizador (apagado, 3 s, 10 s), zoom, exposición y cambio de cámara. Deslicen hacia abajo o toquen fuera para cerrar. Con el panel abierto no cambia el modo foto/video.
+5. El temporizador cuenta en el teléfono y se ve en el reloj. Se cancela con otro toque al disparador. Si la cámara no tiene flash, ese control no aparece. No se puede cambiar de cámara mientras graba.
+6. El teléfono muestra el estado en español: cámara frontal o trasera, zoom, flash o linterna, temporizador, y si la vista previa va por Wi‑Fi, por Wear OS o está pausada.
 
 ## Compilar
 
@@ -101,11 +101,11 @@ La firma de release está en `keystore/camarawatch.jks` (app personal, sideload)
 |---|---|
 | `:shared` | Protocolo, comandos, estado de cámara, codec JPEG (largo + bytes) |
 | `:mobile` | CameraX frontal y trasera, `CameraForegroundService`, servidor TCP `:18765`, listener Wear |
-| `:wear` | UI redonda en dos páginas, cliente TCP, fallback `ChannelClient`, envío de comandos |
+| `:wear` | UI redonda con gestos, cliente TCP, fallback `ChannelClient`, envío de comandos |
 
 Rutas Wear:
 
-- `/camara/command` — `TAKE_PHOTO`, `START_RECORD`, `STOP_RECORD`, `SWITCH_CAMERA`, `ZOOM_IN`, `ZOOM_OUT`, `SET_ZOOM|<ratio>`, `SET_FLASH|OFF|ON|AUTO|TORCH`, `EXPOSURE_UP`, `EXPOSURE_DOWN`
+- `/camara/command` — `TAKE_PHOTO`, `START_RECORD`, `STOP_RECORD`, `SWITCH_CAMERA`, `ZOOM_IN`, `ZOOM_OUT`, `SET_ZOOM|<ratio>`, `SET_FLASH|OFF|ON|AUTO|TORCH`, `EXPOSURE_UP`, `EXPOSURE_DOWN`, `SET_TIMER|0|3|10`, `ARM|PHOTO|segundos`, `ARM|VIDEO|segundos`, `CANCEL_TIMER`
 - `/camara/status` — estado en español y controles (cámara, zoom, flash, exposición)
 - `/camara/preview_info` — IP, puerto, estado y los mismos controles
 - `/camara/preview` — canal de frames JPEG

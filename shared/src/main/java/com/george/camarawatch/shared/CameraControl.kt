@@ -22,16 +22,16 @@ enum class FlashMode {
     TORCH;
 
     fun chipLabel(): String = when (this) {
-        OFF -> "Flash apagado"
-        ON -> "Flash encendido"
-        AUTO -> "Flash auto"
+        OFF -> "Apagado"
+        ON -> "Encendido"
+        AUTO -> "Automático"
         TORCH -> "Linterna"
     }
 
     fun shortLabel(): String = when (this) {
         OFF -> "flash apagado"
         ON -> "flash encendido"
-        AUTO -> "flash auto"
+        AUTO -> "flash automático"
         TORCH -> "linterna"
     }
 
@@ -151,6 +151,16 @@ private fun fmt(value: Float): String = String.format(Locale.US, "%.4f", value)
 
 private fun bit(value: Boolean): String = if (value) "1" else "0"
 
+fun isTimerChoice(seconds: Int): Boolean = seconds == 0 || seconds == 3 || seconds == 10
+
+data class ShutterTimer(
+    val seconds: Int = 0,
+    val remaining: Int = -1,
+    val forVideo: Boolean = false,
+) {
+    val counting: Boolean get() = remaining > 0
+}
+
 sealed class CameraCommand {
     data object TakePhoto : CameraCommand()
     data object StartRecord : CameraCommand()
@@ -162,6 +172,9 @@ sealed class CameraCommand {
     data class SetFlash(val mode: FlashMode) : CameraCommand()
     data object ExposureUp : CameraCommand()
     data object ExposureDown : CameraCommand()
+    data class SetTimer(val seconds: Int) : CameraCommand()
+    data class ArmCountdown(val video: Boolean, val seconds: Int) : CameraCommand()
+    data object CancelCountdown : CameraCommand()
 
     fun toWire(): String = when (this) {
         TakePhoto -> Protocol.TAKE_PHOTO
@@ -174,6 +187,9 @@ sealed class CameraCommand {
         is SetFlash -> "${Protocol.SET_FLASH}|${mode.name}"
         ExposureUp -> Protocol.EXPOSURE_UP
         ExposureDown -> Protocol.EXPOSURE_DOWN
+        is SetTimer -> "${Protocol.SET_TIMER}|$seconds"
+        is ArmCountdown -> "${Protocol.ARM}|${if (video) "VIDEO" else "PHOTO"}|$seconds"
+        CancelCountdown -> Protocol.CANCEL_TIMER
     }
 
     companion object {
@@ -197,6 +213,20 @@ sealed class CameraCommand {
                     val mode = FlashMode.entries.firstOrNull { it.name == parts.getOrNull(1) } ?: return null
                     SetFlash(mode)
                 }
+                Protocol.SET_TIMER -> {
+                    val seconds = parts.getOrNull(1)?.toIntOrNull() ?: return null
+                    if (!isTimerChoice(seconds)) null else SetTimer(seconds)
+                }
+                Protocol.ARM -> {
+                    val video = when (parts.getOrNull(1)) {
+                        "VIDEO" -> true
+                        "PHOTO" -> false
+                        else -> return null
+                    }
+                    val seconds = parts.getOrNull(2)?.toIntOrNull() ?: return null
+                    if (!isTimerChoice(seconds)) null else ArmCountdown(video, seconds)
+                }
+                Protocol.CANCEL_TIMER -> CancelCountdown
                 else -> null
             }
         }
@@ -208,6 +238,7 @@ data class PhoneSnapshot(
     val message: String,
     val recording: Boolean,
     val controls: CameraControls?,
+    val timer: ShutterTimer = ShutterTimer(),
 )
 
 fun encodeSnapshot(
@@ -215,6 +246,7 @@ fun encodeSnapshot(
     message: String,
     recording: Boolean,
     controls: CameraControls,
+    timer: ShutterTimer = ShutterTimer(),
 ): String {
     val safe = message.replace("|", "·").replace("\n", " ")
     return buildString {
@@ -226,6 +258,12 @@ fun encodeSnapshot(
         append(if (recording) "1" else "0")
         append('|')
         append(controls.toWire())
+        append('|')
+        append(timer.seconds)
+        append('|')
+        append(timer.remaining)
+        append('|')
+        append(if (timer.forVideo) "1" else "0")
     }
 }
 
@@ -237,6 +275,11 @@ fun decodeSnapshot(text: String): PhoneSnapshot {
             message = parts[2].ifBlank { "Cámara lista." },
             recording = parts[3] == "1" || parts[3].equals("true", ignoreCase = true),
             controls = CameraControls.fromParts(parts, offset = 4),
+            timer = ShutterTimer(
+                seconds = parts.getOrNull(16)?.toIntOrNull()?.takeIf(::isTimerChoice) ?: 0,
+                remaining = parts.getOrNull(17)?.toIntOrNull() ?: -1,
+                forVideo = parts.getOrNull(18) == "1",
+            ),
         )
     }
     return PhoneSnapshot(

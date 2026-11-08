@@ -8,7 +8,9 @@ import com.george.camarawatch.shared.CameraFacing
 import com.george.camarawatch.shared.FlashMode
 import com.george.camarawatch.shared.PreviewCodec
 import com.george.camarawatch.shared.Protocol
+import com.george.camarawatch.shared.ShutterTimer
 import com.george.camarawatch.shared.decodeSnapshot
+import com.george.camarawatch.shared.isTimerChoice
 import com.google.android.gms.wearable.DataClient
 import com.google.android.gms.wearable.DataEvent
 import com.google.android.gms.wearable.DataEventBuffer
@@ -24,12 +26,13 @@ data class PreviewInfo(
     val status: String,
     val recording: Boolean,
     val controls: CameraControls = CameraControls(),
+    val timer: ShutterTimer = ShutterTimer(),
 )
 
 class WatchWearBridge(
     context: Context,
     private val onPreviewInfo: (PreviewInfo) -> Unit,
-    private val onStatus: (String, Boolean, CameraControls?) -> Unit,
+    private val onStatus: (com.george.camarawatch.shared.PhoneSnapshot) -> Unit,
     private val onFrame: (ByteArray) -> Unit,
 ) : DataClient.OnDataChangedListener, MessageClient.OnMessageReceivedListener {
 
@@ -106,7 +109,7 @@ class WatchWearBridge(
         if (messageEvent.path != Protocol.STATUS_PATH) return
         val text = String(messageEvent.data, Charsets.UTF_8)
         val snapshot = decodeSnapshot(text)
-        onStatus(snapshot.message, snapshot.recording, snapshot.controls)
+        onStatus(snapshot)
     }
 
     companion object {
@@ -132,11 +135,18 @@ private fun com.google.android.gms.wearable.DataItem.toPreviewInfo(): PreviewInf
         exposureStep = map.getFloat(Protocol.KEY_EXPOSURE_STEP, 0f),
         canSwitchCamera = map.getBoolean(Protocol.KEY_CAN_SWITCH, false),
     )
+    val timerSeconds = map.getInt(Protocol.KEY_TIMER, 0)
+    val timer = ShutterTimer(
+        seconds = if (isTimerChoice(timerSeconds)) timerSeconds else 0,
+        remaining = map.getInt(Protocol.KEY_COUNTDOWN, -1),
+        forVideo = map.getBoolean(Protocol.KEY_COUNTDOWN_VIDEO, false),
+    )
     return PreviewInfo(
         ip = ip,
         port = map.getInt(Protocol.KEY_PORT, Protocol.PREVIEW_PORT),
         status = map.getString(Protocol.KEY_STATUS).orEmpty().ifBlank { "Cámara lista." },
         recording = map.getBoolean(Protocol.KEY_RECORDING, false),
         controls = controls,
+        timer = timer,
     )
 }

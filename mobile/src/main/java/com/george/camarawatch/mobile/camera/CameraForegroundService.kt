@@ -25,9 +25,12 @@ import com.george.camarawatch.shared.CameraCommand
 import com.george.camarawatch.shared.CameraControls
 import com.george.camarawatch.shared.PhoneStatus
 import com.george.camarawatch.shared.Protocol
+import com.george.camarawatch.shared.ShutterTimer
+import com.george.camarawatch.shared.isTimerChoice
 import com.google.android.gms.wearable.ChannelClient
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class CameraForegroundService : LifecycleService() {
@@ -40,6 +43,10 @@ class CameraForegroundService : LifecycleService() {
     private var tcpClients = 0
     private var channelClients = 0
     private var wearSyncJob: Job? = null
+    private var countdownJob: Job? = null
+    private var timerSeconds = 0
+    private var countdownRemaining = -1
+    private var countdownForVideo = false
 
     override fun onCreate() {
         super.onCreate()
@@ -123,6 +130,8 @@ class CameraForegroundService : LifecycleService() {
         CommandBus.setRecording(false)
         CommandBus.setPreviewClients(0)
         CommandBus.setControls(CameraControls())
+        countdownJob?.cancel()
+        CommandBus.setTimer(ShutterTimer())
         CommandBus.setStatus(PhoneStatus.STOPPED)
         super.onDestroy()
     }
@@ -141,24 +150,102 @@ class CameraForegroundService : LifecycleService() {
 
     private fun handleCommand(command: CameraCommand) {
         when (command) {
-            CameraCommand.TakePhoto -> camera.takePhoto()
-            CameraCommand.StartRecord -> camera.startRecording()
-            CameraCommand.StopRecord -> camera.stopRecording()
-            CameraCommand.SwitchCamera -> camera.switchCamera()
+            CameraCommand.TakePhoto -> {
+                cancelCountdown(announce = false)
+                camera.takePhoto()
+            }
+            CameraCommand.StartRecord -> {
+                cancelCountdown(announce = false)
+                camera.startRecording()
+            }
+            CameraCommand.StopRecord -> {
+                cancelCountdown(announce = false)
+                camera.stopRecording()
+            }
+            CameraCommand.SwitchCamera -> {
+                cancelCountdown(announce = false)
+                camera.switchCamera()
+            }
             CameraCommand.ZoomIn -> camera.zoomIn()
             CameraCommand.ZoomOut -> camera.zoomOut()
             is CameraCommand.SetZoom -> camera.setZoom(command.ratio)
             is CameraCommand.SetFlash -> camera.setFlash(command.mode)
             CameraCommand.ExposureUp -> camera.exposureUp()
             CameraCommand.ExposureDown -> camera.exposureDown()
+            is CameraCommand.SetTimer -> rememberTimer(command.seconds)
+            is CameraCommand.ArmCountdown -> armCountdown(command.video, command.seconds)
+            CameraCommand.CancelCountdown -> cancelCountdown(announce = true)
         }
+    }
+
+    private fun rememberTimer(seconds: Int) {
+        timerSeconds = if (isTimerChoice(seconds)) seconds else 0
+        pushTimer()
+        scheduleWearSync()
+    }
+
+    private fun armCountdown(video: Boolean, seconds: Int) {
+        val chosen = when {
+            isTimerChoice(seconds) -> seconds
+            isTimerChoice(timerSeconds) -> timerSeconds
+            else -> 0
+        }
+        timerSeconds = chosen
+        if (video && CommandBus.recording.value) {
+            cancelCountdown(announce = false)
+            camera.stopRecording()
+            return
+        }
+        if (chosen == 0) {
+            cancelCountdown(announce = false)
+            if (video) camera.startRecording() else camera.takePhoto()
+            return
+        }
+        countdownJob?.cancel()
+        countdownForVideo = video
+        countdownJob = lifecycleScope.launch {
+            for (left in chosen downTo 1) {
+                if (!isActive) return@launch
+                countdownRemaining = left
+                val noun = if (video) "Video" else "Foto"
+                pushTimer()
+                publishStatus(PhoneStatus.COUNTDOWN, "$noun en $left…")
+                delay(1_000)
+            }
+            if (!isActive) return@launch
+            countdownRemaining = -1
+            pushTimer()
+            if (video) camera.startRecording() else camera.takePhoto()
+        }
+    }
+
+    private fun cancelCountdown(announce: Boolean) {
+        val active = countdownJob?.isActive == true || countdownRemaining > 0
+        countdownJob?.cancel()
+        countdownJob = null
+        countdownRemaining = -1
+        countdownForVideo = false
+        pushTimer()
+        if (announce && active) {
+            publishStatus(PhoneStatus.TIMER_CANCELLED, PhoneStatus.TIMER_CANCELLED.message)
+        }
+    }
+
+    private fun pushTimer() {
+        CommandBus.setTimer(
+            ShutterTimer(
+                seconds = timerSeconds,
+                remaining = countdownRemaining,
+                forVideo = countdownForVideo,
+            ),
+        )
     }
 
     private fun publishClients() {
         val total = tcpClients + channelClients
         CommandBus.setPreviewClients(total)
         hub.setConsumerCount(total)
-        if (CommandBus.recording.value) return
+        if (CommandBus.recording.value || countdownRemaining > 0) return
         val desired = when {
             tcpClients > 0 -> PhoneStatus.PREVIEW_WIFI
             channelClients > 0 -> PhoneStatus.PREVIEW_WEAR
@@ -201,6 +288,8 @@ class CameraForegroundService : LifecycleService() {
         val status = CommandBus.status.value
         return when {
             CommandBus.recording.value -> "Grabando · ${controls.shortLabel()}"
+            status == PhoneStatus.COUNTDOWN || status == PhoneStatus.TIMER_CANCELLED ->
+                CommandBus.statusDetail.value
             status == PhoneStatus.PREVIEW_PAUSED -> status.message
             controls.shortLabel().isNotBlank() && status != PhoneStatus.STOPPED &&
                 status != PhoneStatus.STARTING -> controls.shortLabel()
@@ -216,12 +305,14 @@ class CameraForegroundService : LifecycleService() {
                 detail = CommandBus.statusDetail.value,
                 recording = CommandBus.recording.value,
                 controls = CommandBus.controls.value,
+                timer = CommandBus.timer.value,
             )
             wearBridge.broadcastStatus(
                 status = CommandBus.status.value,
                 detail = CommandBus.statusDetail.value,
                 recording = CommandBus.recording.value,
                 controls = CommandBus.controls.value,
+                timer = CommandBus.timer.value,
             )
         }
     }

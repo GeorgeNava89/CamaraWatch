@@ -1,5 +1,6 @@
 package com.george.camarawatch.wear
 
+import android.content.Context
 import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.os.VibrationEffect
@@ -32,6 +33,9 @@ class MainActivity : ComponentActivity() {
     private val usingWifi = MutableStateFlow(false)
     private val controls = MutableStateFlow(CameraControls())
     private val ambient = MutableStateFlow(false)
+    private val timerSeconds = MutableStateFlow(0)
+    private val countdown = MutableStateFlow(-1)
+    private var suppressCountdown = false
 
     private lateinit var bridge: WatchWearBridge
     private var previewJob: Job? = null
@@ -68,18 +72,21 @@ class MainActivity : ComponentActivity() {
                 status.value = info.status
                 recording.value = info.recording
                 controls.value = info.controls
+                applyCountdown(info.timer.remaining)
                 resumePreviewIfInteractive()
             },
-            onStatus = { text, isRecording, snapshotControls ->
-                status.value = text
-                recording.value = isRecording
-                if (snapshotControls != null) controls.value = snapshotControls
+            onStatus = { snapshot ->
+                status.value = snapshot.message
+                recording.value = snapshot.recording
+                snapshot.controls?.let { controls.value = it }
+                applyCountdown(snapshot.timer.remaining)
             },
             onFrame = { bytes ->
                 val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return@WatchWearBridge
                 preview.value = bitmap.asImageBitmap()
             },
         )
+        timerSeconds.value = savedTimer()
         setContent {
             WatchScreen(
                 status = status,
@@ -88,8 +95,61 @@ class MainActivity : ComponentActivity() {
                 usingWifi = usingWifi,
                 controls = controls,
                 ambient = ambient,
+                timerSeconds = timerSeconds,
+                countdown = countdown,
                 onCommand = ::send,
+                onShutter = ::shutter,
+                onTimer = ::selectTimer,
+                onCancelCountdown = ::cancelCountdown,
             )
+        }
+    }
+
+    private fun savedTimer(): Int {
+        val stored = getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(KEY_TIMER, 0)
+        return if (stored == 3 || stored == 10) stored else 0
+    }
+
+    private fun selectTimer(seconds: Int) {
+        val safe = if (seconds == 3 || seconds == 10) seconds else 0
+        timerSeconds.value = safe
+        getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putInt(KEY_TIMER, safe).apply()
+        send(CameraCommand.SetTimer(safe))
+    }
+
+    private fun shutter(video: Boolean) {
+        if (countdown.value > 0) {
+            cancelCountdown()
+            return
+        }
+        if (video && recording.value) {
+            send(CameraCommand.StopRecord)
+            return
+        }
+        val seconds = timerSeconds.value
+        if (seconds > 0) {
+            suppressCountdown = false
+            countdown.value = seconds
+            send(CameraCommand.ArmCountdown(video = video, seconds = seconds))
+        } else if (video) {
+            send(CameraCommand.StartRecord)
+        } else {
+            send(CameraCommand.TakePhoto)
+        }
+    }
+
+    private fun cancelCountdown() {
+        suppressCountdown = true
+        countdown.value = -1
+        send(CameraCommand.CancelCountdown)
+    }
+
+    private fun applyCountdown(remaining: Int) {
+        if (remaining <= 0) {
+            suppressCountdown = false
+            countdown.value = -1
+        } else if (!suppressCountdown) {
+            countdown.value = remaining
         }
     }
 
@@ -182,5 +242,10 @@ class MainActivity : ComponentActivity() {
     private fun vibrate() {
         val vibrator = getSystemService(Vibrator::class.java) ?: return
         vibrator.vibrate(VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE))
+    }
+
+    companion object {
+        private const val PREFS = "camara_watch"
+        private const val KEY_TIMER = "timer_seconds"
     }
 }

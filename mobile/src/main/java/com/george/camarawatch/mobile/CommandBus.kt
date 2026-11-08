@@ -3,6 +3,7 @@ package com.george.camarawatch.mobile
 import com.george.camarawatch.shared.CameraCommand
 import com.george.camarawatch.shared.CameraControls
 import com.george.camarawatch.shared.PhoneStatus
+import com.george.camarawatch.shared.ShutterTimer
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -35,6 +36,9 @@ object CommandBus {
     private val _controls = MutableStateFlow(CameraControls())
     val controls: StateFlow<CameraControls> = _controls.asStateFlow()
 
+    private val _timer = MutableStateFlow(ShutterTimer())
+    val timer: StateFlow<ShutterTimer> = _timer.asStateFlow()
+
     fun emit(command: CameraCommand) {
         _commands.tryEmit(command)
     }
@@ -62,5 +66,9 @@ object CommandBus {
 
     fun setControls(value: CameraControls) {
         _controls.value = value
+    }
+
+    fun setTimer(value: ShutterTimer) {
+        _timer.value = value
     }
 }
