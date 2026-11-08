@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -70,6 +71,7 @@ import kotlin.math.hypot
 import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 private val RecordRed = Color(0xFFFF3B30)
 private val Scrim = Color(0xB3000000)
@@ -78,6 +80,20 @@ private val FlashAuto = Color(0xFF64B5FF)
 private val FlashTorch = Color(0xFFFFC14D)
 
 private enum class CaptureMode { PHOTO, VIDEO }
+
+@Composable
+private fun bezelInset(side: Dp, disc: Dp, rowOffset: Dp): Dp {
+    return with(LocalDensity.current) {
+        val screenR = side.toPx() / 2f
+        val discR = disc.toPx() / 2f
+        val row = rowOffset.toPx()
+        val margin = 4.dp.toPx()
+        val limit = (screenR - margin - discR).coerceAtLeast(row + 1f)
+        val inward = sqrt((limit * limit - row * row).coerceAtLeast(0f))
+        val discCenterFromEdge = screenR - inward
+        (discCenterFromEdge - 22.dp.toPx()).toDp().coerceIn(2.dp, side * 0.2f)
+    }
+}
 
 @Composable
 fun WatchScreen(
@@ -164,7 +180,7 @@ fun WatchScreen(
             },
         )
         if (!optionsOpen && !counting) {
-            val sideInset = side * 0.13f
+            val sideInset = bezelInset(side, disc = 28.dp, rowOffset = 26.dp)
             val rowOffset = 26.dp
             if (camera.flashControlVisible) {
                 val nextFlash = camera.flashMode.next(camera.flashSupported, camera.torchSupported)
@@ -565,6 +581,12 @@ private fun IconButton(
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.48f)),
+        )
         content()
     }
 }
