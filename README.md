@@ -3,7 +3,7 @@
 App personal en español latino para controlar la cámara del **RedMagic 11 Pro** desde el **OnePlus Watch 3** (Wear OS, pantalla redonda).
 
 - Teléfono: CameraX, foto y video con la cámara trasera o frontal, zoom, flash, linterna, exposición y temporizador. Servicio en primer plano y estados en español.
-- Reloj: vista previa a pantalla completa y un disparador chico. Deslizar a la derecha pasa a video; en video, deslizar a la izquierda vuelve a foto. Deslizar hacia arriba abre flash, temporizador, zoom, exposición y cambio de cámara.
+- Reloj: vista previa a pantalla completa, disparador chico, zoom en un arco superior y botones de video, flash y temporizador en los lados. Deslizar hacia arriba abre el resto de opciones.
 - Módulos: `:mobile`, `:wear`, `:shared`
 - `applicationId`: `com.george.camarawatch`
 - Vista previa: JPEG por TCP en Wi‑Fi (preferido) y respaldo por Wearable `ChannelClient`. Los comandos van por el Data Layer de Wear OS (Bluetooth), así que foto, video, zoom, flash y cambio de cámara no dependen del Wi‑Fi.
@@ -11,7 +11,7 @@ App personal en español latino para controlar la cámara del **RedMagic 11 Pro*
 
 ## Descargas
 
-La versión **1.2.0** se genera al compilar (misma firma en teléfono y reloj):
+La versión **1.3.0** se genera al compilar (misma firma en teléfono y reloj):
 
 - `mobile/build/outputs/apk/release/mobile-release.apk`
 - `wear/build/outputs/apk/release/wear-release.apk`
@@ -72,11 +72,13 @@ Con la pantalla apagada, en ambiente o con la app en segundo plano, Cámara Watc
 ## Uso
 
 1. Teléfono: **Cámara Watch** en primer plano o con la notificación activa. El reloj, en Modo inteligente.
-2. En modo foto, el disparador toma la imagen (`Pictures/CamaraWatch`).
-3. Deslicen a la derecha para video. El mismo disparador graba; tóquenlo otra vez para parar (`Movies/CamaraWatch`). Deslicen a la izquierda para volver a foto. Mientras graba, ese desliz no cambia de modo.
-4. Deslicen hacia arriba para las opciones: flash (apagado, encendido, automático, linterna), temporizador (apagado, 3 s, 10 s), zoom, exposición y cambio de cámara. Deslicen hacia abajo o toquen fuera para cerrar. Con el panel abierto no cambia el modo foto/video.
-5. El temporizador cuenta en el teléfono y se ve en el reloj. Se cancela con otro toque al disparador. Si la cámara no tiene flash, ese control no aparece. No se puede cambiar de cámara mientras graba.
-6. El teléfono muestra el estado en español: cámara frontal o trasera, zoom, flash o linterna, temporizador, y si la vista previa va por Wi‑Fi, por Wear OS o está pausada.
+2. En modo foto, el disparador toma la imagen (`Pictures/CamaraWatch`). El botón de la derecha (videocámara) pasa a video. En video, ese botón muestra una cámara y vuelve a foto. Mientras graba no cambia de modo: primero hay que parar.
+3. El disparador graba y, tocado otra vez, para (`Movies/CamaraWatch`).
+4. A la izquierda, el flash cicla apagado, encendido, automático y linterna. Debajo, el temporizador cicla 3 s, 10 s y apagado. Si la cámara no tiene flash, ese botón no aparece.
+5. El zoom es un arco delgado en la mitad superior: arrastren el dedo sobre el riel para acercar o alejar. El valor (por ejemplo 1.0x) solo aparece mientras arrastran.
+6. Deslicen hacia arriba para cambiar de cámara y la exposición. El panel también repite flash, temporizador y zoom. Deslicen hacia abajo o toquen fuera para cerrar. No se puede cambiar de cámara mientras graba.
+7. El temporizador cuenta en el teléfono y se ve en el reloj. Se cancela con otro toque al disparador. El reloj no muestra si la vista previa va por Wi‑Fi o por Wear OS.
+8. El teléfono muestra el estado en español: cámara frontal o trasera, zoom, flash o linterna, temporizador, y si la vista previa va por Wi‑Fi, por Wear OS o está pausada.
 
 ## Compilar
 

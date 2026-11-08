@@ -23,11 +23,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicInteger
 
 class MainActivity : ComponentActivity() {
-    private val status = MutableStateFlow("Buscando el teléfono…")
+    private val status = MutableStateFlow("")
     private val recording = MutableStateFlow(false)
     private val preview = MutableStateFlow<ImageBitmap?>(null)
     private val usingWifi = MutableStateFlow(false)
@@ -92,12 +91,12 @@ class MainActivity : ComponentActivity() {
                 status = status,
                 recording = recording,
                 preview = preview,
-                usingWifi = usingWifi,
                 controls = controls,
                 ambient = ambient,
                 timerSeconds = timerSeconds,
                 countdown = countdown,
                 onCommand = ::send,
+                onZoom = ::zoomTo,
                 onShutter = ::shutter,
                 onTimer = ::selectTimer,
                 onCancelCountdown = ::cancelCountdown,
@@ -171,10 +170,18 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun send(command: CameraCommand) {
-        vibrate()
+        dispatch(command, haptic = true)
+    }
+
+    private fun zoomTo(ratio: Float) {
+        dispatch(CameraCommand.SetZoom(ratio), haptic = false)
+    }
+
+    private fun dispatch(command: CameraCommand, haptic: Boolean) {
+        if (haptic) vibrate()
         lifecycleScope.launch {
             runCatching { bridge.sendCommand(command) }
-                .onFailure { status.value = it.message ?: "Sin conexión con el teléfono" }
+                .onFailure { status.value = "Sin teléfono" }
         }
     }
 
@@ -202,7 +209,6 @@ class MainActivity : ComponentActivity() {
                     previewEpoch.get() != generation || inAmbient || screenPaused || !isActive
                 }
                 val connectedWifi = if (!ip.isNullOrBlank()) {
-                    status.value = "Conectando vista previa Wi‑Fi…"
                     TcpPreviewClient.tryConnect(
                         ip = ip,
                         port = info.port,
@@ -221,18 +227,12 @@ class MainActivity : ComponentActivity() {
                     continue
                 }
                 usingWifi.value = false
-                status.value = "Vista previa por Wear OS…"
                 val channelOk = runCatching {
                     bridge.openPreviewChannel(shouldStop = shouldStop)
                     true
                 }.getOrDefault(false)
                 if (shouldStop()) break
                 if (!channelOk) {
-                    withContext(Dispatchers.Main) {
-                        if (status.value.startsWith("Vista previa") || status.value.startsWith("Conectando")) {
-                            status.value = "Esperando el teléfono…"
-                        }
-                    }
                     delay(1_500)
                 }
             }

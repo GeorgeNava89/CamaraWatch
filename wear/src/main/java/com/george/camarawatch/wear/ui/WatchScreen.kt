@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -57,8 +58,15 @@ import com.george.camarawatch.shared.CameraCommand
 import com.george.camarawatch.shared.CameraControls
 import com.george.camarawatch.shared.CameraFacing
 import com.george.camarawatch.shared.FlashMode
+import com.george.camarawatch.shared.formatZoom
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.ln
+import kotlin.math.pow
+import kotlin.math.sin
 
 private val RecordRed = Color(0xFFFF3B30)
 private val Scrim = Color(0xB3000000)
@@ -70,12 +78,12 @@ fun WatchScreen(
     status: StateFlow<String>,
     recording: StateFlow<Boolean>,
     preview: StateFlow<ImageBitmap?>,
-    usingWifi: StateFlow<Boolean>,
     controls: StateFlow<CameraControls>,
     ambient: StateFlow<Boolean>,
     timerSeconds: StateFlow<Int>,
     countdown: StateFlow<Int>,
     onCommand: (CameraCommand) -> Unit,
+    onZoom: (Float) -> Unit,
     onShutter: (video: Boolean) -> Unit,
     onTimer: (Int) -> Unit,
     onCancelCountdown: () -> Unit,
@@ -83,13 +91,13 @@ fun WatchScreen(
     val statusText by status.collectAsState()
     val isRecording by recording.collectAsState()
     val frame by preview.collectAsState()
-    val wifi by usingWifi.collectAsState()
     val camera by controls.collectAsState()
     val isAmbient by ambient.collectAsState()
     val timer by timerSeconds.collectAsState()
     val remaining by countdown.collectAsState()
     var mode by remember { mutableStateOf(CaptureMode.PHOTO) }
     var optionsOpen by remember { mutableStateOf(false) }
+    var zoomDrag by remember { mutableStateOf<Float?>(null) }
 
     LaunchedEffect(isRecording) {
         if (isRecording) mode = CaptureMode.VIDEO
@@ -118,7 +126,8 @@ fun WatchScreen(
     ) {
         val side = if (maxWidth < maxHeight) maxWidth else maxHeight
         val safe = side * 0.16f
-        val edge = side * 0.075f
+        val edge = side * 0.09f
+        val problem = if (counting) null else seriousNotice(statusText)
         if (frame != null) {
             Image(
                 bitmap = frame!!,
@@ -127,20 +136,21 @@ fun WatchScreen(
                 contentScale = ContentScale.Crop,
             )
         }
-        if (!optionsOpen && !counting) {
-            ModeGestures(
-                videoMode = mode == CaptureMode.VIDEO,
-                recording = isRecording,
-                onVideo = { mode = CaptureMode.VIDEO },
-                onPhoto = { mode = CaptureMode.PHOTO },
+        if (!optionsOpen) {
+            ZoomArcLayer(
+                controls = camera,
+                zoomEnabled = camera.zoomSupported && !counting,
+                allowPanel = !counting,
+                dragging = zoomDrag,
+                onDragging = { zoomDrag = it },
+                onZoom = onZoom,
                 onOpenOptions = { optionsOpen = true },
             )
         }
         CaptureOverlay(
             safe = safe,
-            statusText = if (counting) "" else statusText,
-            wifi = wifi && !counting,
-            controls = camera,
+            problem = problem,
+            zoomReadout = zoomDrag?.let { formatZoom(it) + "x" },
             mode = mode,
             recording = isRecording,
             countdown = remaining,
@@ -149,26 +159,79 @@ fun WatchScreen(
             },
         )
         if (!optionsOpen && !counting) {
-            if (mode == CaptureMode.PHOTO) {
-                Hint(
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(end = edge)
-                        .semantics { contentDescription = "Desliza a la derecha para video" },
-                ) {
-                    VideoGlyph()
-                    Chevron(ChevronDirection.RIGHT)
+            Column(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .offset(x = edge, y = 46.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                if (camera.flashControlVisible) {
+                    val nextFlash = camera.flashMode.next(camera.flashSupported, camera.torchSupported)
+                    RoundTool(
+                        description = "Flash ${camera.flashMode.chipLabel()}",
+                        active = camera.flashMode != FlashMode.OFF,
+                        onClick = { if (nextFlash != null) onCommand(CameraCommand.SetFlash(nextFlash)) },
+                    ) {
+                        FlashGlyph(
+                            filled = camera.flashMode != FlashMode.OFF,
+                            color = when (camera.flashMode) {
+                                FlashMode.OFF -> Color.White
+                                FlashMode.TORCH -> Color(0xFFE08A00)
+                                else -> Color.Black
+                            },
+                        )
+                        if (camera.flashMode == FlashMode.AUTO) {
+                            Text("A", color = Color.White, style = MaterialTheme.typography.caption2)
+                        }
+                    }
                 }
-            } else if (!isRecording) {
-                Hint(
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .padding(start = edge)
-                        .semantics { contentDescription = "Desliza a la izquierda para foto" },
+                RoundTool(
+                    description = when (timer) {
+                        3 -> "Temporizador 3 segundos"
+                        10 -> "Temporizador 10 segundos"
+                        else -> "Temporizador apagado"
+                    },
+                    active = timer == 3 || timer == 10,
+                    onClick = {
+                        onTimer(
+                            when (timer) {
+                                3 -> 10
+                                10 -> 0
+                                else -> 3
+                            },
+                        )
+                    },
                 ) {
-                    Chevron(ChevronDirection.LEFT)
-                    CameraGlyph()
+                    if (timer == 3 || timer == 10) {
+                        Text(
+                            timer.toString(),
+                            color = Color.White,
+                            style = MaterialTheme.typography.caption1,
+                        )
+                    } else {
+                        TimerGlyph()
+                    }
                 }
+            }
+            RoundTool(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .offset(x = -edge, y = 46.dp),
+                description = when {
+                    isRecording -> "Para primero para cambiar de modo"
+                    mode == CaptureMode.PHOTO -> "Cambiar a video"
+                    else -> "Cambiar a foto"
+                },
+                active = mode == CaptureMode.VIDEO,
+                enabled = !isRecording,
+                onClick = {
+                    if (!isRecording) {
+                        mode = if (mode == CaptureMode.PHOTO) CaptureMode.VIDEO else CaptureMode.PHOTO
+                    }
+                },
+            ) {
+                if (mode == CaptureMode.PHOTO) VideoGlyph() else CameraGlyph()
             }
         }
         if (optionsOpen) {
@@ -185,38 +248,116 @@ fun WatchScreen(
 }
 
 @Composable
-private fun ModeGestures(
-    videoMode: Boolean,
-    recording: Boolean,
-    onVideo: () -> Unit,
-    onPhoto: () -> Unit,
+private fun ZoomArcLayer(
+    controls: CameraControls,
+    zoomEnabled: Boolean,
+    allowPanel: Boolean,
+    dragging: Float?,
+    onDragging: (Float?) -> Unit,
+    onZoom: (Float) -> Unit,
     onOpenOptions: () -> Unit,
 ) {
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        if (!zoomEnabled && dragging == null) return@Canvas
+        if (!controls.zoomSupported) return@Canvas
+        val geom = arcGeom(size.width, size.height, 0f)
+        val stroke = Stroke(width = 2.4.dp.toPx(), cap = StrokeCap.Round)
+        drawArc(
+            color = Color.Black.copy(alpha = 0.45f),
+            startAngle = 180f,
+            sweepAngle = -180f,
+            useCenter = false,
+            topLeft = Offset(geom.center.x - geom.radius, geom.center.y - geom.radius),
+            size = Size(geom.radius * 2, geom.radius * 2),
+            style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round),
+        )
+        drawArc(
+            color = Color.White.copy(alpha = 0.38f),
+            startAngle = 180f,
+            sweepAngle = -180f,
+            useCenter = false,
+            topLeft = Offset(geom.center.x - geom.radius, geom.center.y - geom.radius),
+            size = Size(geom.radius * 2, geom.radius * 2),
+            style = stroke,
+        )
+        val shown = dragging ?: controls.zoomRatio
+        val t = zoomFraction(controls.minZoom, controls.maxZoom, shown)
+        if (t > 0.02f) {
+            drawArc(
+                color = Color.White.copy(alpha = 0.9f),
+                startAngle = 180f,
+                sweepAngle = -180f * t,
+                useCenter = false,
+                topLeft = Offset(geom.center.x - geom.radius, geom.center.y - geom.radius),
+                size = Size(geom.radius * 2, geom.radius * 2),
+                style = stroke,
+            )
+        }
+        val thumb = pointOnArc(geom, t)
+        drawCircle(Color.Black.copy(alpha = 0.55f), radius = 6.5.dp.toPx(), center = thumb)
+        drawCircle(Color.White, radius = 4.2.dp.toPx(), center = thumb)
+    }
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .pointerInput(videoMode, recording) {
-                val threshold = 64.dp.toPx()
+            .pointerInput(zoomEnabled, allowPanel, controls.minZoom, controls.maxZoom) {
+                val threshold = 56.dp.toPx()
+                val tolerance = 28.dp.toPx()
                 var totalX = 0f
                 var totalY = 0f
+                var zooming = false
+                var latest = Float.NaN
+                var lastSent = Float.NaN
+                fun publish(ratio: Float, force: Boolean) {
+                    latest = ratio
+                    if (!force && !lastSent.isNaN() && abs(ratio - lastSent) < 0.05f) return
+                    lastSent = ratio
+                    onZoom(ratio)
+                }
                 detectDragGestures(
-                    onDragStart = {
+                    onDragStart = { start ->
                         totalX = 0f
                         totalY = 0f
+                        latest = Float.NaN
+                        val geom = arcGeom(size.width.toFloat(), size.height.toFloat(), tolerance)
+                        val fraction = fractionOnArc(geom, start)
+                        zooming = zoomEnabled && fraction != null
+                        if (zooming && fraction != null) {
+                            val ratio = ratioForFraction(controls.minZoom, controls.maxZoom, fraction)
+                            onDragging(ratio)
+                            publish(ratio, force = true)
+                        }
                     },
                     onDrag = { change, drag ->
                         totalX += drag.x
                         totalY += drag.y
-                        if (abs(totalX) > threshold || abs(totalY) > threshold) change.consume()
+                        if (zooming) {
+                            val geom = arcGeom(size.width.toFloat(), size.height.toFloat(), tolerance)
+                            val fraction = fractionOnArc(geom, change.position, loose = true)
+                            if (fraction != null) {
+                                val ratio = ratioForFraction(controls.minZoom, controls.maxZoom, fraction)
+                                onDragging(ratio)
+                                publish(ratio, force = false)
+                            }
+                            change.consume()
+                        }
                     },
                     onDragEnd = {
-                        val absX = abs(totalX)
-                        val absY = abs(totalY)
-                        when {
-                            absY > absX * 1.15f && absY > threshold && totalY < 0f -> onOpenOptions()
-                            absX > absY * 1.15f && absX > threshold && totalX > 0f && !videoMode -> onVideo()
-                            absX > absY * 1.15f && absX > threshold && totalX < 0f && videoMode && !recording -> onPhoto()
+                        if (zooming && !latest.isNaN()) {
+                            publish(latest, force = true)
+                            onDragging(null)
+                        } else if (
+                            allowPanel &&
+                            totalY < -threshold &&
+                            abs(totalY) > abs(totalX) * 1.15f
+                        ) {
+                            onOpenOptions()
                         }
+                        zooming = false
+                    },
+                    onDragCancel = {
+                        onDragging(null)
+                        zooming = false
                     },
                 )
             },
@@ -226,9 +367,8 @@ private fun ModeGestures(
 @Composable
 private fun CaptureOverlay(
     safe: Dp,
-    statusText: String,
-    wifi: Boolean,
-    controls: CameraControls,
+    problem: String?,
+    zoomReadout: String?,
     mode: CaptureMode,
     recording: Boolean,
     countdown: Int,
@@ -255,25 +395,20 @@ private fun CaptureOverlay(
                     Text("REC", color = RecordRed, style = MaterialTheme.typography.caption2)
                 }
             }
-            Text(
-                text = controls.zoomLabel(),
-                color = Color.White,
-                style = MaterialTheme.typography.caption1,
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(Scrim)
-                    .padding(horizontal = 8.dp, vertical = 2.dp),
-            )
-            if (wifi) {
+            if (zoomReadout != null) {
                 Text(
-                    text = "Wi‑Fi",
+                    text = zoomReadout,
                     color = Color.White,
-                    style = MaterialTheme.typography.caption2,
+                    style = MaterialTheme.typography.caption1,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(Scrim)
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
                 )
             }
-            if (countdown <= 0 && statusText.isNotBlank()) {
+            if (!problem.isNullOrBlank()) {
                 Text(
-                    text = statusText,
+                    text = problem,
                     color = Color.White,
                     style = MaterialTheme.typography.caption2,
                     textAlign = TextAlign.Center,
@@ -370,6 +505,141 @@ private fun Shutter(video: Boolean, recording: Boolean, onClick: () -> Unit) {
                     .background(Color.White),
             )
         }
+    }
+}
+
+@Composable
+private fun RoundTool(
+    description: String,
+    active: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    content: @Composable () -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .size(42.dp)
+            .clip(CircleShape)
+            .background(Color(0x80303030))
+            .border(if (active) 2.dp else 0.dp, Color.White, CircleShape)
+            .clickable(enabled = enabled, onClick = onClick)
+            .semantics { contentDescription = description },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun FlashGlyph(filled: Boolean, color: Color) {
+    Canvas(modifier = Modifier.size(16.dp)) {
+        val path = Path().apply {
+            moveTo(size.width * 0.55f, size.height * 0.02f)
+            lineTo(size.width * 0.18f, size.height * 0.56f)
+            lineTo(size.width * 0.46f, size.height * 0.56f)
+            lineTo(size.width * 0.38f, size.height * 0.98f)
+            lineTo(size.width * 0.84f, size.height * 0.40f)
+            lineTo(size.width * 0.54f, size.height * 0.40f)
+            close()
+        }
+        if (filled) {
+            drawPath(path, color)
+        } else {
+            drawPath(path, color, style = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round))
+        }
+    }
+}
+
+@Composable
+private fun TimerGlyph() {
+    Canvas(modifier = Modifier.size(16.dp)) {
+        drawCircle(
+            color = Color.White,
+            radius = size.minDimension * 0.36f,
+            style = Stroke(width = 1.6.dp.toPx()),
+        )
+        drawLine(
+            color = Color.White,
+            start = Offset(size.width * 0.5f, size.height * 0.5f),
+            end = Offset(size.width * 0.5f, size.height * 0.28f),
+            strokeWidth = 1.6.dp.toPx(),
+            cap = StrokeCap.Round,
+        )
+        drawLine(
+            color = Color.White,
+            start = Offset(size.width * 0.5f, size.height * 0.08f),
+            end = Offset(size.width * 0.5f, size.height * 0.16f),
+            strokeWidth = 1.6.dp.toPx(),
+            cap = StrokeCap.Round,
+        )
+    }
+}
+
+private fun seriousNotice(text: String): String? {
+    val normalized = text.lowercase()
+    if (normalized.isBlank()) return null
+    if (normalized.contains("wi") && normalized.contains("fi")) return null
+    if (normalized.contains("vista previa")) return null
+    if (normalized.contains("wear")) return null
+    if (normalized.contains("channel")) return null
+    return when {
+        normalized.contains("sin conexión") ||
+            normalized.contains("no está conectado") ||
+            normalized.contains("sin nodo") ||
+            normalized.contains("sin teléfono") -> "Sin teléfono"
+        normalized.contains("falta permiso") -> "Falta permiso"
+        normalized.contains("no se puede cambiar") -> "Para primero"
+        normalized.contains("error") -> "Error"
+        normalized.contains("no disponible") || normalized.contains("no se pudo") -> "Sin cámara"
+        else -> null
+    }
+}
+
+private data class ArcGeom(val center: Offset, val radius: Float, val tolerance: Float)
+
+private fun arcGeom(width: Float, height: Float, tolerance: Float): ArcGeom {
+    val side = if (width < height) width else height
+    return ArcGeom(Offset(width / 2f, height / 2f), side * 0.42f, tolerance)
+}
+
+private fun fractionOnArc(geom: ArcGeom, point: Offset, loose: Boolean = false): Float? {
+    val dx = point.x - geom.center.x
+    val dyUp = geom.center.y - point.y
+    val distance = hypot(dx, dyUp)
+    val limit = if (loose) geom.tolerance * 1.8f else geom.tolerance
+    if (limit > 0f && abs(distance - geom.radius) > limit) return null
+    val angle = atan2(dyUp, dx)
+    if (angle < 0.08f || angle > Math.PI.toFloat() - 0.08f) return null
+    return (1f - angle / Math.PI.toFloat()).coerceIn(0f, 1f)
+}
+
+private fun pointOnArc(geom: ArcGeom, fraction: Float): Offset {
+    val angle = Math.PI * (1.0 - fraction.coerceIn(0f, 1f).toDouble())
+    return Offset(
+        x = geom.center.x + (geom.radius * cos(angle)).toFloat(),
+        y = geom.center.y - (geom.radius * sin(angle)).toFloat(),
+    )
+}
+
+private fun zoomFraction(min: Float, max: Float, ratio: Float): Float {
+    if (max <= min + 0.001f) return 0f
+    val clamped = ratio.coerceIn(min, max)
+    return if (min > 0f && max / min > 1.2f) {
+        (ln(clamped / min) / ln(max / min)).toFloat().coerceIn(0f, 1f)
+    } else {
+        ((clamped - min) / (max - min)).coerceIn(0f, 1f)
+    }
+}
+
+private fun ratioForFraction(min: Float, max: Float, fraction: Float): Float {
+    val t = fraction.coerceIn(0f, 1f)
+    if (max <= min) return min
+    return if (min > 0f && max / min > 1.2f) {
+        min * (max / min).toDouble().pow(t.toDouble()).toFloat()
+    } else {
+        min + (max - min) * t
     }
 }
 
@@ -586,21 +856,7 @@ private fun Stepper(
     }
 }
 
-@Composable
-private fun Hint(modifier: Modifier, content: @Composable () -> Unit) {
-    Row(
-        modifier = modifier
-            .clip(CircleShape)
-            .background(Color(0x80303030))
-            .padding(horizontal = 4.dp, vertical = 3.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(1.dp),
-    ) {
-        content()
-    }
-}
-
-private enum class ChevronDirection { LEFT, RIGHT, UP, DOWN }
+private enum class ChevronDirection { UP, DOWN }
 
 @Composable
 private fun Chevron(direction: ChevronDirection) {
@@ -610,16 +866,6 @@ private fun Chevron(direction: ChevronDirection) {
         val w = size.width
         val h = size.height
         when (direction) {
-            ChevronDirection.RIGHT -> {
-                path.moveTo(w * 0.32f, h * 0.18f)
-                path.lineTo(w * 0.72f, h * 0.5f)
-                path.lineTo(w * 0.32f, h * 0.82f)
-            }
-            ChevronDirection.LEFT -> {
-                path.moveTo(w * 0.68f, h * 0.18f)
-                path.lineTo(w * 0.28f, h * 0.5f)
-                path.lineTo(w * 0.68f, h * 0.82f)
-            }
             ChevronDirection.UP -> {
                 path.moveTo(w * 0.18f, h * 0.64f)
                 path.lineTo(w * 0.5f, h * 0.28f)
