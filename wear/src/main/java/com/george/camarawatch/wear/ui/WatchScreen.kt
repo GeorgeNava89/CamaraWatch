@@ -72,6 +72,10 @@ import kotlin.math.sin
 
 private val RecordRed = Color(0xFFFF3B30)
 private val Scrim = Color(0xB3000000)
+private val IconLight = Color(0xFFF4F4F4)
+private val FlashOn = Color(0xFFFFF176)
+private val FlashAuto = Color(0xFF64B5FF)
+private val FlashTorch = Color(0xFFFFC14D)
 
 private enum class CaptureMode { PHOTO, VIDEO }
 
@@ -171,12 +175,9 @@ fun WatchScreen(
                         description = "Flash ${camera.flashMode.chipLabel()}",
                         onClick = { if (nextFlash != null) onCommand(CameraCommand.SetFlash(nextFlash)) },
                     ) {
-                        FlashGlyph(
-                            filled = camera.flashMode != FlashMode.OFF,
-                            color = if (camera.flashMode == FlashMode.TORCH) Color(0xFFFFC14D) else Color.White,
-                        )
+                        FlashGlyph(camera.flashMode)
                         if (camera.flashMode == FlashMode.AUTO) {
-                            Text("A", color = Color.White, style = MaterialTheme.typography.caption2)
+                            Text("A", color = FlashAuto, style = MaterialTheme.typography.caption2)
                         }
                     }
                 }
@@ -199,7 +200,7 @@ fun WatchScreen(
                     if (timer == 3 || timer == 10) {
                         Text(
                             timer.toString(),
-                            color = Color.White,
+                            color = IconLight,
                             style = MaterialTheme.typography.title3,
                         )
                     } else {
@@ -441,7 +442,7 @@ private fun CaptureOverlay(
             if (zoomReadout != null) {
                 Text(
                     text = zoomReadout,
-                    color = Color.White,
+                    color = IconLight,
                     style = MaterialTheme.typography.caption1,
                     modifier = Modifier
                         .clip(CircleShape)
@@ -452,7 +453,7 @@ private fun CaptureOverlay(
             if (!problem.isNullOrBlank()) {
                 Text(
                     text = problem,
-                    color = Color.White,
+                    color = IconLight,
                     style = MaterialTheme.typography.caption2,
                     textAlign = TextAlign.Center,
                     maxLines = 2,
@@ -475,7 +476,7 @@ private fun CaptureOverlay(
             ) {
                 Text(
                     text = countdown.toString(),
-                    color = Color.White,
+                    color = IconLight,
                     style = MaterialTheme.typography.display2,
                     modifier = Modifier
                         .clip(CircleShape)
@@ -484,7 +485,7 @@ private fun CaptureOverlay(
                 )
                 Text(
                     text = "Toca para cancelar",
-                    color = Color.White,
+                    color = IconLight,
                     style = MaterialTheme.typography.caption2,
                     textAlign = TextAlign.Center,
                     modifier = Modifier
@@ -569,21 +570,34 @@ private fun IconButton(
 }
 
 @Composable
-private fun FlashGlyph(filled: Boolean, color: Color) {
-    Canvas(modifier = Modifier.size(16.dp)) {
+private fun FlashGlyph(mode: FlashMode) {
+    val color = when (mode) {
+        FlashMode.OFF -> IconLight
+        FlashMode.ON -> FlashOn
+        FlashMode.AUTO -> FlashAuto
+        FlashMode.TORCH -> FlashTorch
+    }
+    Canvas(modifier = Modifier.size(20.dp)) {
         val path = Path().apply {
-            moveTo(size.width * 0.55f, size.height * 0.02f)
-            lineTo(size.width * 0.18f, size.height * 0.56f)
-            lineTo(size.width * 0.46f, size.height * 0.56f)
-            lineTo(size.width * 0.38f, size.height * 0.98f)
-            lineTo(size.width * 0.84f, size.height * 0.40f)
-            lineTo(size.width * 0.54f, size.height * 0.40f)
+            moveTo(size.width * 0.55f, size.height * 0.08f)
+            lineTo(size.width * 0.22f, size.height * 0.54f)
+            lineTo(size.width * 0.46f, size.height * 0.54f)
+            lineTo(size.width * 0.40f, size.height * 0.92f)
+            lineTo(size.width * 0.82f, size.height * 0.40f)
+            lineTo(size.width * 0.56f, size.height * 0.40f)
             close()
         }
-        if (filled) {
-            drawPath(path, color)
+        if (mode == FlashMode.OFF) {
+            drawPath(path, color, style = Stroke(width = 1.7.dp.toPx(), cap = StrokeCap.Round))
+            drawLine(
+                color = color,
+                start = Offset(size.width * 0.16f, size.height * 0.84f),
+                end = Offset(size.width * 0.84f, size.height * 0.16f),
+                strokeWidth = 2.dp.toPx(),
+                cap = StrokeCap.Round,
+            )
         } else {
-            drawPath(path, color, style = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round))
+            drawPath(path, color)
         }
     }
 }
@@ -592,19 +606,19 @@ private fun FlashGlyph(filled: Boolean, color: Color) {
 private fun TimerGlyph() {
     Canvas(modifier = Modifier.size(16.dp)) {
         drawCircle(
-            color = Color.White,
+            color = IconLight,
             radius = size.minDimension * 0.36f,
             style = Stroke(width = 1.6.dp.toPx()),
         )
         drawLine(
-            color = Color.White,
+            color = IconLight,
             start = Offset(size.width * 0.5f, size.height * 0.5f),
             end = Offset(size.width * 0.5f, size.height * 0.28f),
             strokeWidth = 1.6.dp.toPx(),
             cap = StrokeCap.Round,
         )
         drawLine(
-            color = Color.White,
+            color = IconLight,
             start = Offset(size.width * 0.5f, size.height * 0.08f),
             end = Offset(size.width * 0.5f, size.height * 0.16f),
             strokeWidth = 1.6.dp.toPx(),
@@ -834,7 +848,7 @@ private fun OptionsPanel(
                 if (nothing) {
                     Text(
                         text = "Esperando la cámara…",
-                        color = Color.White,
+                        color = IconLight,
                         style = MaterialTheme.typography.caption2,
                         textAlign = TextAlign.Center,
                     )
@@ -905,7 +919,7 @@ private fun Stepper(
         )
         Text(
             text = value,
-            color = Color.White,
+            color = IconLight,
             style = MaterialTheme.typography.title3,
             textAlign = TextAlign.Center,
             modifier = Modifier.widthIn(min = 44.dp),
@@ -949,7 +963,7 @@ private fun Chevron(direction: ChevronDirection) {
 private fun VideoGlyph() {
     Canvas(modifier = Modifier.size(22.dp)) {
         drawRoundRect(
-            color = Color.White,
+            color = IconLight,
             topLeft = Offset(0f, size.height * 0.22f),
             size = Size(size.width * 0.58f, size.height * 0.56f),
             cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
@@ -989,24 +1003,24 @@ private fun SwitchCameraGlyph() {
 private fun CameraGlyph() {
     Canvas(modifier = Modifier.size(22.dp)) {
         drawRoundRect(
-            color = Color.White,
+            color = IconLight,
             topLeft = Offset(size.width * 0.04f, size.height * 0.28f),
             size = Size(size.width * 0.92f, size.height * 0.62f),
             cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx()),
         )
         drawRoundRect(
-            color = Color.White,
+            color = IconLight,
             topLeft = Offset(size.width * 0.18f, size.height * 0.08f),
             size = Size(size.width * 0.28f, size.height * 0.24f),
             cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
         )
         drawCircle(
-            color = Color.Black,
+            color = Color(0xFF3A3A3A),
             radius = size.minDimension * 0.16f,
             center = Offset(size.width * 0.5f, size.height * 0.58f),
         )
         drawCircle(
-            color = Color.White,
+            color = IconLight,
             radius = size.minDimension * 0.07f,
             center = Offset(size.width * 0.5f, size.height * 0.58f),
         )

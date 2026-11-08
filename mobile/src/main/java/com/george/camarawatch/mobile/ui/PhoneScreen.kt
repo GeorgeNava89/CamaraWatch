@@ -134,11 +134,13 @@ fun PhoneScreen(
                     .height(52.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (serviceRunning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    contentColor = Color.White,
                 ),
             ) {
                 Icon(
                     imageVector = if (serviceRunning) Icons.Filled.StopCircle else Icons.Filled.Cameraswitch,
                     contentDescription = null,
+                    tint = Color.White,
                 )
                 Spacer(Modifier.size(8.dp))
                 Text(if (serviceRunning) "Detener cámara" else "Iniciar cámara")

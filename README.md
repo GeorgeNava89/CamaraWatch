@@ -11,7 +11,7 @@ App personal en español latino para controlar la cámara del **RedMagic 11 Pro*
 
 ## Descargas
 
-La versión **1.4.0** se genera al compilar (misma firma en teléfono y reloj):
+La versión **1.5.0** se genera al compilar (misma firma en teléfono y reloj):
 
 - `mobile/build/outputs/apk/release/mobile-release.apk`
 - `wear/build/outputs/apk/release/wear-release.apk`
