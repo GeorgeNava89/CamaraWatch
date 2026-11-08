@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -163,55 +164,26 @@ fun WatchScreen(
             },
         )
         if (!optionsOpen && !counting) {
-            Column(
-                modifier = Modifier.align(Alignment.CenterStart),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-                horizontalAlignment = Alignment.Start,
-            ) {
-                if (camera.flashControlVisible) {
-                    val nextFlash = camera.flashMode.next(camera.flashSupported, camera.torchSupported)
-                    IconButton(
-                        description = "Flash ${camera.flashMode.chipLabel()}",
-                        onClick = { if (nextFlash != null) onCommand(CameraCommand.SetFlash(nextFlash)) },
-                    ) {
-                        FlashGlyph(camera.flashMode)
-                        if (camera.flashMode == FlashMode.AUTO) {
-                            Text("A", color = FlashAuto, style = MaterialTheme.typography.caption2)
-                        }
-                    }
-                }
+            val sideInset = side * 0.13f
+            val rowOffset = 26.dp
+            if (camera.flashControlVisible) {
+                val nextFlash = camera.flashMode.next(camera.flashSupported, camera.torchSupported)
                 IconButton(
-                    description = when (timer) {
-                        3 -> "Temporizador 3 segundos"
-                        10 -> "Temporizador 10 segundos"
-                        else -> "Temporizador apagado"
-                    },
-                    onClick = {
-                        onTimer(
-                            when (timer) {
-                                3 -> 10
-                                10 -> 0
-                                else -> 3
-                            },
-                        )
-                    },
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .padding(start = sideInset)
+                        .offset(y = -rowOffset),
+                    description = "Flash ${camera.flashMode.chipLabel()}",
+                    onClick = { if (nextFlash != null) onCommand(CameraCommand.SetFlash(nextFlash)) },
                 ) {
-                    if (timer == 3 || timer == 10) {
-                        Text(
-                            timer.toString(),
-                            color = IconLight,
-                            style = MaterialTheme.typography.title3,
-                        )
-                    } else {
-                        TimerGlyph()
-                    }
+                    FlashGlyph(camera.flashMode)
                 }
             }
             IconButton(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .offset(y = (-4).dp),
-                alignEnd = true,
+                    .padding(end = sideInset)
+                    .offset(y = -rowOffset),
                 description = when {
                     isRecording -> "Para primero para cambiar de modo"
                     mode == CaptureMode.PHOTO -> "Cambiar a video"
@@ -226,12 +198,42 @@ fun WatchScreen(
             ) {
                 if (mode == CaptureMode.PHOTO) VideoGlyph() else CameraGlyph()
             }
+            IconButton(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(start = sideInset)
+                    .offset(y = rowOffset),
+                description = when (timer) {
+                    3 -> "Temporizador 3 segundos"
+                    10 -> "Temporizador 10 segundos"
+                    else -> "Temporizador apagado"
+                },
+                onClick = {
+                    onTimer(
+                        when (timer) {
+                            3 -> 10
+                            10 -> 0
+                            else -> 3
+                        },
+                    )
+                },
+            ) {
+                if (timer == 3 || timer == 10) {
+                    Text(
+                        timer.toString(),
+                        color = IconLight,
+                        style = MaterialTheme.typography.title3,
+                    )
+                } else {
+                    TimerGlyph()
+                }
+            }
             if (camera.canSwitchCamera && !isRecording) {
                 IconButton(
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
-                        .offset(y = 40.dp),
-                    alignEnd = true,
+                        .padding(end = sideInset)
+                        .offset(y = rowOffset),
                     description = if (camera.facing == CameraFacing.BACK) {
                         "Cambiar a frontal"
                     } else {
@@ -554,7 +556,6 @@ private fun IconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    alignEnd: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     Box(
@@ -562,7 +563,7 @@ private fun IconButton(
             .size(44.dp)
             .clickable(enabled = enabled, onClick = onClick)
             .semantics { contentDescription = description },
-        contentAlignment = if (alignEnd) Alignment.CenterEnd else Alignment.CenterStart,
+        contentAlignment = Alignment.Center,
     ) {
         content()
     }
@@ -589,11 +590,28 @@ private fun FlashGlyph(mode: FlashMode) {
         drawPath(path, color)
         if (mode == FlashMode.OFF) {
             drawLine(
-                color = Color(0xFF121212),
-                start = Offset(size.width * 0.18f, size.height * 0.82f),
-                end = Offset(size.width * 0.82f, size.height * 0.18f),
-                strokeWidth = 2.4.dp.toPx(),
+                color = Color.White,
+                start = Offset(size.width * 0.08f, size.height * 0.90f),
+                end = Offset(size.width * 0.92f, size.height * 0.10f),
+                strokeWidth = 2.6.dp.toPx(),
                 cap = StrokeCap.Round,
+            )
+        }
+        if (mode == FlashMode.AUTO) {
+            drawContext.canvas.nativeCanvas.drawText(
+                "A",
+                size.width,
+                size.height * 0.98f,
+                android.graphics.Paint().apply {
+                    this.color = android.graphics.Color.parseColor("#64B5FF")
+                    textSize = 9.dp.toPx()
+                    typeface = android.graphics.Typeface.create(
+                        android.graphics.Typeface.SANS_SERIF,
+                        android.graphics.Typeface.BOLD,
+                    )
+                    isAntiAlias = true
+                    textAlign = android.graphics.Paint.Align.RIGHT
+                },
             )
         }
     }
@@ -990,20 +1008,47 @@ private fun VideoGlyph() {
 @Composable
 private fun SwitchCameraGlyph() {
     Canvas(modifier = Modifier.size(22.dp)) {
-        val stroke = Stroke(width = 2.1.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-        val path = Path().apply {
-            moveTo(size.width * 0.22f, size.height * 0.40f)
-            quadraticBezierTo(size.width * 0.50f, size.height * 0.02f, size.width * 0.80f, size.height * 0.36f)
-            moveTo(size.width * 0.62f, size.height * 0.22f)
-            lineTo(size.width * 0.84f, size.height * 0.36f)
-            lineTo(size.width * 0.66f, size.height * 0.52f)
-            moveTo(size.width * 0.78f, size.height * 0.60f)
-            quadraticBezierTo(size.width * 0.50f, size.height * 0.98f, size.width * 0.20f, size.height * 0.64f)
-            moveTo(size.width * 0.38f, size.height * 0.78f)
-            lineTo(size.width * 0.16f, size.height * 0.64f)
-            lineTo(size.width * 0.34f, size.height * 0.48f)
+        val stroke = Stroke(width = 1.7.dp.toPx(), cap = StrokeCap.Round)
+        drawRoundRect(
+            color = IconLight,
+            topLeft = Offset(size.width * 0.22f, size.height * 0.34f),
+            size = Size(size.width * 0.56f, size.height * 0.40f),
+            cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
+        )
+        drawCircle(
+            color = Color(0xFF2A2A2A),
+            radius = size.minDimension * 0.09f,
+            center = Offset(size.width * 0.50f, size.height * 0.54f),
+        )
+        drawArc(
+            color = IconLight,
+            startAngle = 200f,
+            sweepAngle = 120f,
+            useCenter = false,
+            topLeft = Offset(size.width * 0.08f, size.height * 0.08f),
+            size = Size(size.width * 0.84f, size.height * 0.84f),
+            style = stroke,
+        )
+        drawArc(
+            color = IconLight,
+            startAngle = 20f,
+            sweepAngle = 120f,
+            useCenter = false,
+            topLeft = Offset(size.width * 0.08f, size.height * 0.08f),
+            size = Size(size.width * 0.84f, size.height * 0.84f),
+            style = stroke,
+        )
+        val head = Path().apply {
+            moveTo(size.width * 0.78f, size.height * 0.16f)
+            lineTo(size.width * 0.96f, size.height * 0.20f)
+            lineTo(size.width * 0.82f, size.height * 0.34f)
+            close()
+            moveTo(size.width * 0.22f, size.height * 0.84f)
+            lineTo(size.width * 0.04f, size.height * 0.80f)
+            lineTo(size.width * 0.18f, size.height * 0.66f)
+            close()
         }
-        drawPath(path, Color.White, style = stroke)
+        drawPath(head, IconLight)
     }
 }
 
